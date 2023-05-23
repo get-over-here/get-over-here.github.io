@@ -1,32 +1,16 @@
 WIDTH = 60;
 EXTRA_WIDTH = 22;
 HEIGHT = 46;
-VASES = 15;
-HP_VASE = '\u03A8';
-HP_VASE_COLOR = '#ff0';
-MP_VASE = '\u03A9';
-MP_VASE_COLOR = '#09f';
 DEFAULT_COLOR = '#e2c900';
-SINGLE_WALL = '#';
-WALLS = [SINGLE_WALL];
 MAP_SATURATION = 0.35;
 TORCH_DISTANCE = 5;
 SHOOT_DISTANCE = TORCH_DISTANCE - 1;
 STARTING_ENEMY_DISTANCE = 7;
-WIND_RADIUS = 10;
-KILL_RADIUS = 3;
 
-ENEMIES = 5;
 CORROSION_LIMIT = 100;
 
 PLAYER_HP = 10;
-MANA = 2;
-YEARS = ['1150BC', '525BC', '333BC', '30BC', '619AD'];
 
-FORMAT_HARD = 'hard';
-FORMAT_EASY = 'easy';
-
-LOCKERS = 15;
 LIGHT_RADIUS = 10;
 
 UID_NOTHING = -1;
@@ -34,9 +18,7 @@ UID_AMMO = 1;
 UID_DETECTOR = 2;
 UID_MEDPAK = 3;
 
-
 CHAR_PLAYER = '@';
-// CHAR_ENEMY = '\u00A7';
 CHAR_FLOOR = '.';
 CHAR_WALL = '#';
 // CHAR_LIGHT = '\u00A4';
@@ -101,13 +83,19 @@ let Game = {
 		Game.start();
 	},
 	keyDown: function(e) {
+		if (Animator.running) {
+			return;
+		};
+
 		if (Game.screen === 'game') {
 			Game.player.handleEvent(e);
 		} else if (Game.screen === 'help') {
 			Game.screen = 'game';
 			Game.drawMap();
 		} else {
-			Game.start();
+			if (e.code === 'Space') {
+				Game.start();
+			}
 		}
 	},
 
@@ -140,7 +128,9 @@ let Game = {
 		let y = Math.floor(HEIGHT / 2) - 2;
 		this.display.draw(x, y, 'YOU DIED', 'lightcoral');
 		y += 2;
-		this.display.draw(x, y, 'Final score: '+Game.score, 'lightcoral');
+		this.display.draw(x, y, 'Total score: '+Game.score, 'lightcoral');
+		y += 2;
+		this.display.draw(x, y, 'Press [Space] to restart', 'white');
 		Game.printStats();
 	},
 
@@ -159,15 +149,16 @@ let Game = {
 
 		let x = Math.floor(WIDTH / 2);
 		let y = Math.floor(HEIGHT / 2) - 2;
-		this.display.draw(x, y, 'YOU CAN ESCAPE', 'lightgreen');
+		this.display.draw(x, y, 'YOU WIN', 'lightgreen');
 		y += 2;
 		this.display.draw(x, y, 'Final score: '+Game.score, 'lightgreen');
+		y += 2;
+		this.display.draw(x, y, 'Press [Space] to restart', 'white');
 		Game.printStats();
 	},
 
 	nextLevel: function() {
 		this.messages = [];
-		this.year = YEARS[this.level - 1];
 		this.engine = new ROT.Engine(this.scheduler);
 		this.enemies = {};
 		this.map = {};
@@ -185,12 +176,6 @@ let Game = {
 Game.printStats = function() {
 	let OFFSET = WIDTH + 5;
 	let TOP_OFFSET = 1;
-
-	// this.display.draw(WIDTH + 10, TOP_OFFSET, 'Tomb of the Mummy RL', 'orange');
-	// this.display.draw(WIDTH + 10, TOP_OFFSET + 1.2, 'Level ' + this.level + ': Year ' + this.year, 'orange');
-
-	// TOP_OFFSET += 4;
-
 	let status = {
 		1: '%c{gray}Dead%c{}',
 		3: '%c{red}Lethally Wounded%c{}',
@@ -298,7 +283,6 @@ Game.addMessage = function(message, noPretty=false) {
 	if (Game.messages.length > 10) {
 		Game.messages.shift();
 	}
-	// Game.printStats();
 }
 Game.texts = [];
 Game.texts[UID_NOTHING] = 'nothing';
@@ -308,17 +292,3 @@ Game.texts[UID_MEDPAK] = 'medpack';
 Game.itemName = function(uid) {
 	return Game.texts[uid];
 };
-
-
-
-
-/*
-	винтовка, заряды кончаются
-	стрельба - нажать огонь, если монстров видимых больше 1 - менюшка выбора
-	монстры разных видов, одни бегают, другие в засаде, третьи размножаются
-	можно включать свет/камеры в комнатах, чтобы видеть что там творится
-	датчик движения, который показывает движение, собственно
-	смыслы: перебить всех монстров и улететь на этом корабле
-	при генерации нужно расставить шкафчики с лутом
-	изначально мы ничего не видим, но разведанное остаётся известным
-*/

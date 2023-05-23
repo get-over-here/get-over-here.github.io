@@ -1,37 +1,3 @@
-// Game.countAdjacent = function(x, y) {
-// 	let adjacentFree = 0;
-// 	for(let di = -1; di < 2; di++) {
-// 		for(let dj = -1; dj < 2; dj++) {
-// 			if (di === 0 && dj === 0) {
-// 				continue;
-// 			}
-// 			let newx = x + di;
-// 			let newy = y + dj;
-// 			let key = makeKey(newx, newy);
-// 			if ((key in this.map) && this.map[key] === '.') {
-// 				++adjacentFree;
-// 			}
-// 		}
-// 	}
-// 	return adjacentFree;
-// };
-// Game.countWallsAround = function(x, y) {
-// 	let adjacentFree = 0;
-// 	for(let di = -1; di < 2; di++) {
-// 		for(let dj = -1; dj < 2; dj++) {
-// 			if (di === 0 && dj === 0) {
-// 				continue;
-// 			}
-// 			let newx = x + di;
-// 			let newy = y + dj;
-// 			let key = makeKey(newx, newy);
-// 			if ((key in this.map) && this.map[key] === '#') {
-// 				++adjacentFree;
-// 			}
-// 		}
-// 	}
-// 	return adjacentFree;
-// };
 Game.getCellsAround = function(x, y, char = '') {
 	let around = [];
 	for (let dx = -1; dx <= 1; dx++) {
@@ -63,22 +29,7 @@ Game.countCellsAround = function(x, y) {
 	}
 	return around;
 };
-// Game.checkCharOnMap = function(x, y, char) {
-// 	let key = makeKey(x, y);
-// 	if ((key in this.map) && Game.map[key] === char) {
-// 		return true;
-// 	}
-// 	return false;
-// };
-// Game.getItemFromLocker = function(x, y) {
-// 	let key = makeKey(x, y);
-// 	if (key in this.lockers) {
-// 		let item = this.lockers[key];
-// 		this.lockers[key] = -1;
-// 		return item;
-// 	}
-// 	return -1;
-// };
+
 Game.isAccessible = function(x, y) {
 	let key = makeKey(x, y);
 	if (!(key in Game.map) || Game.map[key] instanceof Wall) {
@@ -121,6 +72,7 @@ Game.generateMap = function() {
 		CHAR_EGG, CHAR_EGG, CHAR_EGG, CHAR_EGG, CHAR_EGG,
 		CHAR_HUGGER, CHAR_HUGGER, CHAR_HUGGER, CHAR_HUGGER, CHAR_HUGGER,
 		CHAR_SOLDIER, CHAR_SOLDIER, CHAR_SOLDIER, CHAR_SOLDIER, CHAR_SOLDIER,
+		// CHAR_SOLDIER,
 	];
 	let length = types.length;
 
@@ -155,7 +107,6 @@ Game.buildWalls = function() {
 	}
 };
 Game.generateLockers = function() {
-	// ammo, detector, medpak
 	let items = [
 		UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO,
 		// UID_DETECTOR, UID_DETECTOR, UID_DETECTOR, UID_DETECTOR, UID_DETECTOR,
@@ -176,7 +127,6 @@ Game.generateLockers = function() {
 				let y = cells[1][1];
 				cells = Game.countCellsAround(cells[1][0], cells[1][1]);
 				if (cells[CHAR_WALL] < 4) {
-					// console.log(i, key, cells);
 					let pos = randomIndex(items);
 					let item = UID_AMMO;
 					if (items.length > 0) {
@@ -311,6 +261,14 @@ Game.drawChar = function(entity, litUp, known) {
 };
 
 Game.drawMap = function() {
+	if (Game.screen === 'win') {
+		Game.endLevel();
+		return;
+	}
+	if (Game.screen === 'lose') {
+		Game.gameOver();
+		return;
+	}
 	this.display.clear();
 	for (let key in this.map) {
 		this.drawChar(this.map[key], key in this.litUp, key in this.known);
@@ -319,24 +277,28 @@ Game.drawMap = function() {
 		let visible = key in this.litUp;
 		let enemy = this.enemies[key];
 		if (visible) {
-			for (let i = 0; i < enemy.fov.length; i++) {
-				let [x, y] = enemy.fov[i];
-				let key = makeKey(x, y);
-				if (key in this.litUp) {
-					if (!(key in this.enemies)) {
-						this.display.draw(x, y, CHAR_FLOOR, COLOR_ENEMY, COLOR_SHINING);
+			if (!Animator.running) {
+				for (let i = 0; i < enemy.fov.length; i++) {
+					let [x, y] = enemy.fov[i];
+					let key = makeKey(x, y);
+					if (key in this.litUp) {
+						if (!(key in this.enemies)) {
+							this.display.draw(x, y, CHAR_FLOOR, COLOR_ENEMY, COLOR_SHINING);
+						}
 					}
 				}
 			}
 			this.drawChar(this.enemies[key], visible, visible);
 		}
 		if (this.debug) {
+			/*
 			if (enemy.path) {
 				for (let i = 0; i < enemy.path.length; i++) {
 					let [x, y] = enemy.path[i];
 					this.display.draw(x, y, '+', 'pink');
 				}
 			}
+			*/
 			this.drawChar(this.enemies[key], true, true);
 		}
 

@@ -103,7 +103,6 @@ Player.prototype.handleEvent = function(e) {
 		'Backquote' : 'debug',
 		'KeyH'      : 'help',
 	};
-	// keyMap[27] = "help";
 	let code = e.code;
 
 	if (code in keyMap) {
@@ -119,8 +118,6 @@ Player.prototype.handleEvent = function(e) {
 			break;
 		case 'debug':
 			// Game.debug = !Game.debug;
-			// Game.player.hp--;
-			// console.log(Game.player.hp);
 			break;
 		case 'help':
 			Game.printHelp();

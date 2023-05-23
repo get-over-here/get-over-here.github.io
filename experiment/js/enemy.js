@@ -1,8 +1,4 @@
-
 let Enemy = function(x, y, char) {
-	// this.x = x;
-	// this.y = y;
-	// this.dir = ROT.DIRS[8][0];
 	this.dir = 0;
 	this.moveTo(x, y);
 	this.char = char;
@@ -21,8 +17,6 @@ let Enemy = function(x, y, char) {
 	this.blockedTurns = 0;
 	this.canSee = {};
 	this.fov = [];
-	// this._updateLitUp();
-	// this._draw()
 	this.playerWasSeen = false;
 	if (this.char === CHAR_EGG) {
 		this.birth = ROT.RNG.getUniformInt(100, 200);
@@ -126,17 +120,6 @@ Enemy.prototype.act = function() {
 		}
 		return;
 	}
-
-
-	if (this.char === CHAR_HUGGER) {
-		// no damage, game over on touch
-		// this.calcFov();
-	}
-	if (this.char === CHAR_SOLDIER) {
-		// it bites and spits, player can run away and shoot
-		// this.calcFov();
-	}
-
 	if (this.playerWasSeen) {
 		let nextToPlayer = Math.abs(this.x - Game.player.x) <= 1 && Math.abs(this.y - Game.player.y) <= 1;
 		if (nextToPlayer) {
@@ -170,109 +153,8 @@ Enemy.prototype.act = function() {
 		let dir = this.dir + ROT.RNG.getItem([-1, 0, +1]);
 		this.setDir(dir);
 	}
-	return;
-
-	/*
-	var seesPlayer = false;
-	var nextToPlayer = Math.abs(this.x - Game.player.x) <= 1 && Math.abs(this.y - Game.player.y) <= 1 && !Game.player.hidden;
-	var nextToTorch = false;
-	for(var dx = -1; dx <= 1; dx++) {
-		for(var dy = -1; dy <= 1; dy++) {
-			var newx = this.x + dx;
-			var newy = this.y + dy;
-			var key = makeKey(newx, newy);
-			if ((key in Game.map) && Game.map[key] === CHAR_ENEMY && Game.enemies[key].hasTorch) nextToTorch = true;
-		}
-	}
-
-	if (nextToPlayer) {
-		seesPlayer = true;
-	} else {
-		if (!Game.player.hidden && (makeKey(Game.player.x, Game.player.y) in Game.litUp)) {
-			var fov = new ROT.FOV.PreciseShadowcasting(Game.passableCallback);
-			seesPlayerCallback = function(x, y, r, dummy) {
-				if (x === Game.player.x && y === Game.player.y) {
-					seesPlayer = true;
-				}
-			};
-			fov.compute(this.x, this.y, TORCH_DISTANCE, seesPlayerCallback);
-		}
-	}
-
-	if (nextToPlayer) {
-		Game.player.getAttacked(this.damage);
-		this._draw();
-		return;
-	} else if (seesPlayer) {
-		if (Game.format === FORMAT_EASY || Math.abs(this.x - Game.player.x) + Math.abs(this.y - Game.player.y) > SHOOT_DISTANCE) {
-			Game.map[makeKey(this.x, this.y)] = '.';
-			this.path = computePath(this.x, this.y, Game.player.x, Game.player.y, "direct");
-			Game.map[makeKey(this.x, this.y)] = this.char;
-		} else {
-			Animator.shoot(this.x, this.y, Game.player.x, Game.player.y, '*', "red", this.damage);
-			return ;
-		}
-	} else if (!this.hasTorch && nextToTorch) {
-		this.hasTorch = true;
-		this._updateLitUp();
-		this._draw();
-		return;
-	} else if (!this.path || this.path.length === 0 || this.blockedTurns > 1) {
-		this.blockedTurns = 0;
-		var distance = Math.floor(Math.random() * (this.hasTorch ? 10 : 1)) + 3;
-		var candidates = [];
-		for(var i = -distance; i <= distance; i++) {
-			for (var sign = -1; sign < 2; sign++) {
-				if (sign === 0) continue;
-				newx = this.x - i;
-				newy = this.y + distance * sign;
-				key = makeKey(newx, newy);
-				if (Game.isPassable(key)) {
-					candidates.push([newx, newy]);
-				}
-				newy = this.y - i;
-				newx = this.x + distance * sign;
-				key = makeKey(newx, newy);
-				if (Game.isPassable(key)) {
-					candidates.push([newx, newy]);
-				}
-			}
-		}
-		// console.log("candidates", candidates);
-		if (candidates.length > 0) {
-			for(var tryN = 0; tryN < 5; tryN++) {
-				var tmp = candidates[randomIndex(candidates)];
-				newx = tmp[0];
-				newy = tmp[1];
-				this.path = computePath(this.x, this.y, newx, newy);
-			}
-		}
-	}
-	// console.log(this.path);
-
-	if (this.path && this.path.length > 0) {
-	  nextStep = this.path[0];
-	  if (Game.map[makeKey(nextStep[0], nextStep[1])] === '.') {
-		  Game.map[makeKey(this.x, this.y)] = '.';
-		  delete Game.enemies[makeKey(this.x, this.y)];
-		  this.x = nextStep[0];
-		  this.y = nextStep[1];
-		  Game.enemies[makeKey(this.x, this.y)] = this;
-		  Game.map[makeKey(this.x, this.y)] = this.char;
-		  // console.log("after move", Game.enemies);
-		  this._updateLitUp();
-		  this._draw();
-		  this.path.shift();
-	  } else this.blockedTurns += 1;
-	} else this.blockedTurns += 1;
-	*/
 };
 
-// Enemy.prototype.loseTorch = function() {
-// 	this.hasTorch = false;
-// 	this.path = null;
-// 	this._updateLitUp();
-// };
 
 Enemy.prototype.getAttacked = function(damage = 1) {
 	this.hp -= damage;
@@ -294,7 +176,7 @@ Enemy.prototype.getAttacked = function(damage = 1) {
 		Game.scheduler.remove(this);
 		Game.player.updateLight();
 		if (Object.keys(Game.enemies).length === 0) {
-			Game.endLevel();
+			Game.screen = 'win';
 		}
 	}
 };
