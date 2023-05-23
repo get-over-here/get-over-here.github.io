@@ -1,4 +1,3 @@
-
 // mostly from https://github.com/laurheth/pocket-universe-7drl/blob/master/script/animation.js
 let Animator = {
 	running: false,

@@ -24,7 +24,6 @@ Player.prototype.updateLight = function() {
 		this.canSee = {};
 		return;
 	}
-	// @todo когда игрок спрятался, он не видит что происходит рядом с ним, но слышит
 	this.canSee = Game.updateLight(this);
 
 	this.enemies = [];

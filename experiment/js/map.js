@@ -38,7 +38,6 @@ Game.isAccessible = function(x, y) {
 	return true;
 };
 Game.generateMap = function() {
-	// this.map = Array(WIDTH).fill(null).map(()=>Array(HEIGHT).fill(null));
 
 	this.rmap = new ROT.Map.Digger(
 		WIDTH,
@@ -109,7 +108,6 @@ Game.buildWalls = function() {
 Game.generateLockers = function() {
 	let items = [
 		UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO,
-		// UID_DETECTOR, UID_DETECTOR, UID_DETECTOR, UID_DETECTOR, UID_DETECTOR,
 		UID_MEDPAK ,UID_MEDPAK ,UID_MEDPAK ,UID_MEDPAK ,UID_MEDPAK,
 	];
 	let walls = Object.keys(this.walls);

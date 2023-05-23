@@ -45,14 +45,10 @@ COLOR_SHINING = '#ffe30026';
 let makeKey = function(x, y) {
 	return x + ',' + y;
 };
-// let randomIndex = function(arr) {
-// 	return Math.floor(ROT.RNG.getUniform() * arr.length);
-// };
 let randomIndex = function(arr) {
 	return ROT.RNG.getUniformInt(0, arr.length-1);
 };
-let computePath = function(x1, y1, x2, y2, mode = 'planning') {
-	// callback = (mode === 'planning' ? Game.visibleCallback : Game.walkableCallback);
+let computePath = function(x1, y1, x2, y2) {
 	let astar = new ROT.Path.AStar(x2, y2, Game.visibleCallback, {topology:8});
 	let path = [];
 	let pathCallback = function(x, y) {
@@ -78,14 +74,13 @@ let Game = {
 		canvas = this.display.getContainer();
 		canvas.setAttribute('id', 'canvas');
 		document.body.appendChild(canvas);
-		this.debug = false;
 		this.scheduler = new ROT.Scheduler.Simple();
 		Game.start();
 	},
 	keyDown: function(e) {
 		if (Animator.running) {
 			return;
-		};
+		}
 
 		if (Game.screen === 'game') {
 			Game.player.handleEvent(e);
@@ -104,7 +99,6 @@ let Game = {
 
 		this.player = null;
 		this.engine = null;
-		this.level = 1;
 		this.score = 0;
 		this.turns = 0;
 		this.paused = false;
@@ -194,46 +188,36 @@ Game.printStats = function() {
 
 	this.display.draw(OFFSET + 2, TOP_OFFSET, 'Health: ');
 	this.display.drawText(OFFSET + 6, TOP_OFFSET, text);
-
 	TOP_OFFSET += 2;
+
 	this.display.draw(OFFSET + 2, TOP_OFFSET, 'Ammo: ');
 	this.display.draw(OFFSET + 5, TOP_OFFSET, Game.player.ammo.toString(10), '#00ca37');
-	
-	// TOP_OFFSET += 2;
-	// OFFSET -= 1;
-	// this.display.draw(OFFSET, TOP_OFFSET, 'Enemies: ');
-	// for(i = 0; i < Object.keys(Game.enemies).length; i++) this.display.draw(OFFSET + 3 + i, TOP_OFFSET, '*', 'red');
-	// for(i = Object.keys(Game.enemies).length; i < ENEMIES; i++) this.display.draw(OFFSET + 3 + i, TOP_OFFSET, '*', 'grey');
 	TOP_OFFSET += 2;
 	OFFSET += 5;
 
-	// this.display.draw(OFFSET, TOP_OFFSET, 'Enemy HP: ' + ENEMY_HP[Game.level - 1]);
-	// this.display.draw(OFFSET, TOP_OFFSET + 2, 'Enemy damage: ' + ENEMY_DAMAGE[Game.level - 1]);
-
-	// TOP_OFFSET += 4;
 	this.display.draw(OFFSET, TOP_OFFSET, 'Current score: ' + Game.score);
 	this.display.draw(OFFSET, TOP_OFFSET + 2, 'Turns taken: ' + Game.turns);
-
 	OFFSET += 1;
 	TOP_OFFSET += 4;
+
 	this.display.draw(OFFSET, TOP_OFFSET, Game.player.char + ' - human (you)', '#0f0');
-	this.display.draw(OFFSET, TOP_OFFSET + 1, CHAR_LOCKER + ' - locker to hide', COLOR_LOCKER);
-	this.display.draw(OFFSET, TOP_OFFSET + 2, CHAR_LIGHT + ' - lamp to shine', COLOR_LIGHT);
+	this.display.draw(OFFSET, TOP_OFFSET + 1, CHAR_LOCKER + ' - locker', COLOR_LOCKER);
+	this.display.draw(OFFSET, TOP_OFFSET + 2, CHAR_LIGHT + ' - camera', COLOR_LIGHT);
 	this.display.draw(OFFSET, TOP_OFFSET + 3, CHAR_EGG+CHAR_HUGGER+CHAR_SOLDIER + ' - aliens', 'red');
 	this.display.draw(OFFSET, TOP_OFFSET + 4, '. - passage', DEFAULT_COLOR);
 	this.display.draw(OFFSET, TOP_OFFSET + 5, '# - wall', DEFAULT_COLOR);
-
 	TOP_OFFSET += 8;
+
 	this.display.draw(OFFSET, TOP_OFFSET, 'Quick help:', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 1, 'Arrows to move in 4 directions', 'white');
+	this.display.draw(OFFSET, TOP_OFFSET + 1, 'arrows to move in 4 directions', 'white');
 	this.display.draw(OFFSET, TOP_OFFSET + 2, 'qweasdzc to move in 8 directions', 'white');
 	this.display.draw(OFFSET, TOP_OFFSET + 3, 'v - wait a turn', 'white');
 	this.display.draw(OFFSET, TOP_OFFSET + 4, 'f - interact with nearest', 'white');
 	this.display.draw(OFFSET, TOP_OFFSET + 5, 'x - shoot to nearest', 'white');
 	this.display.draw(OFFSET, TOP_OFFSET + 6, 'h - full help', 'white');
-
 	OFFSET = WIDTH + 2;
 	TOP_OFFSET += 12;
+
 	let LIMIT = EXTRA_WIDTH - 3;
 	this.display.drawText(OFFSET, TOP_OFFSET-2, 'Messages:');
 	for(var i = 0; i < Game.messages.length; i++) {

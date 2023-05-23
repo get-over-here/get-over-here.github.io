@@ -82,12 +82,9 @@ Enemy.prototype.turnTo = function(x, y) {
 }
 
 Enemy.prototype.act = function() {
-	// dead alien is dangerous, you can't walk over it
 	if (this.hp <= 0) {
-		// floor corroding
 		this.hp--;
 		if (this.hp < CORROSION_LIMIT) {
-			// hole in the floor, time limit until game over
 		}
 		return;
 	}
