@@ -1,6 +1,7 @@
 let Enemy = function(x, y, char) {
 	this.dir = 0;
 	this.moveTo(x, y);
+	this.type = 'enemy';
 	this.char = char;
 	this.colorOn = COLOR_ENEMY;
 	this.colorOff = COLOR_ENEMY;
@@ -18,6 +19,7 @@ let Enemy = function(x, y, char) {
 	this.canSee = {};
 	this.fov = [];
 	this.playerWasSeen = false;
+	this.targetDoor = null;
 	if (this.char === CHAR_EGG) {
 		this.birth = ROT.RNG.getUniformInt(100, 200);
 	}
@@ -25,7 +27,7 @@ let Enemy = function(x, y, char) {
 Enemy.prototype.calcFov = function() {
 	let fov = new ROT.FOV.RecursiveShadowcasting(Game.visibleCallback);
 	fovCallback = function(x, y, distance, visibility) {
-		if (Game.map[makeKey(x,y)] instanceof Floor) {
+		if (Game.map[makeKey(x,y)].type === TYPE_FLOOR) {
 			this.fov.push([x, y]);
 			// player has been detected, run!
 			if (!Game.player.hidden && x === Game.player.x && y === Game.player.y) {
@@ -38,11 +40,13 @@ Enemy.prototype.calcFov = function() {
 		}
 	};
 	this.fov = [];
-	fov.compute90(this.x, this.y, TORCH_DISTANCE, this.dir, fovCallback.bind(this));
+	fov.compute180(this.x, this.y, TORCH_DISTANCE, this.dir, fovCallback.bind(this));
 }
 
 Enemy.prototype.moveTo = function(x, y) {
-	delete Game.enemies[this.key];
+	if (this.key in Game.enemies) {
+		delete Game.enemies[this.key];
+	}
 	this.x = x;
 	this.y = y;
 	this.key = makeKey(x, y);
@@ -83,8 +87,11 @@ Enemy.prototype.turnTo = function(x, y) {
 
 Enemy.prototype.act = function() {
 	if (this.hp <= 0) {
-		this.hp--;
-		if (this.hp < CORROSION_LIMIT) {
+		if (Game.pressure > 100) {
+			this.hp--;
+			if (this.hp < -CORROSION_LIMIT) {
+				Game.pressure = 100;
+			}
 		}
 		return;
 	}
@@ -103,14 +110,11 @@ Enemy.prototype.act = function() {
 				let x0 = next[0];
 				let y0 = next[1];
 				let entity = next[2];
-				if (entity instanceof Floor) {
-					let enemy = new Enemy(x0, y0, CHAR_HUGGER);
-					let key = makeKey(x0, y0)
-					Game.enemies[key] = enemy;
-					Game.scheduler.add(enemy, true);
-					// changes of enemies count skipped
-					// because of victory condition
+				if (entity.type === TYPE_FLOOR) {
 					// it is not a birth, it's a hatching
+					let enemy = new Enemy(x0, y0, CHAR_HUGGER);
+					enemy.moveTo(x0, y0);
+					Game.scheduler.add(enemy, true);
 					break;
 				}
 			}
@@ -124,20 +128,52 @@ Enemy.prototype.act = function() {
 			return;
 		} else {
 			this.path = computePath(this.x, this.y, Game.player.x, Game.player.y);
+			if (!this.path || this.path.length === 0) {
+				if (this.char === CHAR_SOLDIER) {
+					this.path = computePath(this.x, this.y, Game.player.x, Game.player.y, 'breakable');
+				}
+			}
 		}
 	} else if (!this.path || this.path.length === 0 || this.blockedTurns > 1) {
 		let pos = Game.selectNextPatrolRoom(this);
 		this.path = computePath(this.x, this.y, pos[0], pos[1]);
 	}
 
+	if (this.targetDoor) {
+		this.targetDoor.getAttacked(this.damage);
+		if (Game.entities[this.targetDoor.key]) {
+			Game.addMessage('%c{yellow}Breaking sounds%c{}');
+			return;
+		} else {
+			this.path = [
+				[this.targetDoor.x, this.targetDoor.y],
+			];
+			this.targetDoor = null;
+			Game.addMessage('%c{red}Crash sound!%c{}', true);
+		}
+	}
 
 	if (this.path && this.path.length > 0) {
 		let nextStep = this.path[0];
-		let key = makeKey(nextStep[0], nextStep[1]);
-		this.turnTo(nextStep[0], nextStep[1]);
-		if (Game.map[key] instanceof Floor) {
+		let x = nextStep[0];
+		let y = nextStep[1];
+		this.turnTo(x, y);
+	
+		if (this.char === CHAR_SOLDIER && this.playerWasSeen) {
+			let key = makeKey(x, y);
+			let entity = Game.entities[key];
+			if (entity && entity.type === TYPE_DOOR) {
+				if (entity.solid) {
+					this.playerWasSeen = false;
+					this.targetDoor = entity;
+					return;
+				}
+			}
+		}
+
+		if (Game.isPassable(x, y)) {
 			this.blockedTurns = 0;
-			this.moveTo(nextStep[0], nextStep[1]);
+			this.moveTo(x, y);
 			this.calcFov();
 			this.path.shift();
 		} else {
@@ -147,6 +183,7 @@ Enemy.prototype.act = function() {
 		this.blockedTurns += 1;
 	}
 	if (this.blockedTurns > 1) {
+		this.path = [];
 		let dir = this.dir + ROT.RNG.getItem([-1, 0, +1]);
 		this.setDir(dir);
 	}
@@ -156,24 +193,16 @@ Enemy.prototype.act = function() {
 Enemy.prototype.getAttacked = function(damage = 1) {
 	this.hp -= damage;
 	this.playerWasSeen = true;
-	if (this.hp <= 0) {
-		this.hp = 0;
-		switch(this.char){
-			case CHAR_HUGGER:
-				Game.score += 3;
-				break;
-			case CHAR_SOLDIER:
-				Game.score += 5;
-				break;
-			case CHAR_EGG:
-				Game.score += 1;
-				break;
-		}
-		delete Game.enemies[this.key];
-		Game.scheduler.remove(this);
-		Game.player.updateLight();
-		if (Object.keys(Game.enemies).length === 0) {
-			Game.screen = 'win';
-		}
+	if (this.hp > 0) {
+		return;
 	}
+	this.hp = 0;
+	this.char = CHAR_ENEMY_DEAD;
+	this.colorOn = COLOR_ENEMY_DEAD;
+	this.colorOff = COLOR_ENEMY_DEAD;
+	this.fov = [];
+	// Game.scheduler.remove(this);
+	Game.player.updateLight();
+	Game.enemiesCount++;
+	Game.addMessage('%c{yellow}Acid corrosion detected!', true);
 };

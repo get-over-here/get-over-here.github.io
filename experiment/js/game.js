@@ -1,67 +1,3 @@
-WIDTH = 60;
-EXTRA_WIDTH = 22;
-HEIGHT = 46;
-DEFAULT_COLOR = '#e2c900';
-MAP_SATURATION = 0.35;
-TORCH_DISTANCE = 5;
-SHOOT_DISTANCE = TORCH_DISTANCE - 1;
-STARTING_ENEMY_DISTANCE = 7;
-
-CORROSION_LIMIT = 100;
-
-PLAYER_HP = 10;
-
-LIGHT_RADIUS = 10;
-
-UID_NOTHING = -1;
-UID_AMMO = 1;
-UID_DETECTOR = 2;
-UID_MEDPAK = 3;
-
-CHAR_PLAYER = '@';
-CHAR_FLOOR = '.';
-CHAR_WALL = '#';
-// CHAR_LIGHT = '\u00A4';
-CHAR_LIGHT = 'T';
-CHAR_LOCKER = '\u00B6';
-
-CHAR_EGG = '\u00A9';
-CHAR_EGG_EMPTY = '\u00A2';
-CHAR_HUGGER = '\u00A3';
-CHAR_SOLDIER = '\u00A7';
-
-COLOR_LIGHT = '#aeeafc';
-COLOR_LIGHT_OFF = '#3ccbfa';
-COLOR_LIGHT_DARK = '#377b91';
-
-COLOR_LOCKER = '#90ee90';
-COLOR_LOCKER_DARK = '#528752';
-
-COLOR_ENEMY = '#ff0000';
-
-COLOR_FLOOR = '#e2c900';
-COLOR_SHINING = '#ffe30026';
-
-let makeKey = function(x, y) {
-	return x + ',' + y;
-};
-let randomIndex = function(arr) {
-	return ROT.RNG.getUniformInt(0, arr.length-1);
-};
-let computePath = function(x1, y1, x2, y2) {
-	let astar = new ROT.Path.AStar(x2, y2, Game.visibleCallback, {topology:8});
-	let path = [];
-	let pathCallback = function(x, y) {
-		path.push([x, y]);
-	};
-	astar.compute(x1, y1, pathCallback);
-	if (path) {
-		path.shift();
-	}
-	return path;
-};
-
-
 let Game = {
 	init: function() {
 		this.display = new ROT.Display({
@@ -69,7 +5,7 @@ let Game = {
 			height: HEIGHT,
 			fontSize: 19,
 			forceSquareRatio: true,
-			bg: '#000'
+			bg: '#000000',
 		});
 		canvas = this.display.getContainer();
 		canvas.setAttribute('id', 'canvas');
@@ -77,26 +13,36 @@ let Game = {
 		this.scheduler = new ROT.Scheduler.Simple();
 		Game.start();
 	},
+
 	keyDown: function(e) {
 		if (Animator.running) {
 			return;
 		}
-
-		if (Game.screen === 'game') {
-			Game.player.handleEvent(e);
-		} else if (Game.screen === 'help') {
-			Game.screen = 'game';
-			Game.drawMap();
-		} else {
-			if (e.code === 'Space') {
+		switch(Game.screen) {
+			case 'game':
+				Game.player.handleEvent(e);
+				break;
+			case 'help':
+				Game.screen = 'game';
+				Game.drawMap();
+				break;
+			case 'start':
+				Game.screen = 'game';
+				Game.player.updateLight();
+				Game.recomputeLights();
+				Game.drawMap();
+				break;
+			case 'debug':
+				Game.handleDebug(e);
+				break;
+			default:
 				Game.start();
-			}
 		}
 	},
 
 	start: function() {
 		this.screen = 'game';
-
+		this.debug = JSON.parse(localStorage.getItem('experiment_debugs')) || {};
 		this.player = null;
 		this.engine = null;
 		this.score = 0;
@@ -113,166 +59,102 @@ let Game = {
 		this.engine.start();
 	},
 
-	gameOver: function() {
+	printTotalScores: function(x, y, color) {
+		let percent1 = Math.floor(Game.enemiesCount * 100 / Game.enemiesMax);
+		this.display.draw(x, y, 'Final score: '+percent1+'%', color);
+		if (percent1 >= 100) {
+			y += 2;
+			let percent2 = Math.floor(Game.percents * 100 / Game.percentsTotal);
+			this.display.draw(x, y, 'Additional score: '+percent2+'%', color);
+			y += 2;
+			this.display.draw(x, y, 'Total score: '+(percent1+percent2)+'%', color);
+		}
+		return y;
+	},
+
+	gameOver: function(type) {
 		this.screen = 'lose';
 		this.scheduler.clear();
 		this.display.clear();
 
+		if (type === 'pressure') {
+			type = 'YOU SUFFOCATED';
+		} else {
+			type = 'YOU DIED';
+		}
 		let x = Math.floor(WIDTH / 2);
 		let y = Math.floor(HEIGHT / 2) - 2;
-		this.display.draw(x, y, 'YOU DIED', 'lightcoral');
+		this.display.draw(x, y, type, 'lightcoral');
 		y += 2;
-		this.display.draw(x, y, 'Total score: '+Game.score, 'lightcoral');
-		y += 2;
-		this.display.draw(x, y, 'Press [Space] to restart', 'white');
+		y += Game.printTotalScores(x, y, 'lightcoral');
+		y += 3;
+
+		this.display.draw(x, y, 'Press [F] to restart', 'white');
 		Game.printStats();
 	},
 
 	endLevel: function() {
 		this.screen = 'win';
-		for (let key in this.map) {
-			let entity = this.map[key];
-			if (entity.char === CHAR_LIGHT && entity.untouched) {
-				Game.score += 1;
-			} else if (entity.char === CHAR_LOCKER && entity.item !== UID_NOTHING) {
-				Game.score += 1;
-			}
-		}
+
 		this.scheduler.clear();
 		this.display.clear();
 
 		let x = Math.floor(WIDTH / 2);
 		let y = Math.floor(HEIGHT / 2) - 2;
-		this.display.draw(x, y, 'YOU WIN', 'lightgreen');
+		this.display.draw(x, y, 'YOU ESCAPED', 'lightgreen');
 		y += 2;
-		this.display.draw(x, y, 'Final score: '+Game.score, 'lightgreen');
-		y += 2;
-		this.display.draw(x, y, 'Press [Space] to restart', 'white');
+		y += Game.printTotalScores(x, y, 'lightgreen');
+		y += 3;
+
+		this.display.draw(x, y, 'Press [F] to restart', 'white');
 		Game.printStats();
 	},
 
 	nextLevel: function() {
+		this.screen = 'start';
 		this.messages = [];
 		this.engine = new ROT.Engine(this.scheduler);
+		this.entities = {};
 		this.enemies = {};
+		this.enemiesCount = 0;
+		this.enemiesMax = 0;
+		this.percents = 0;
+		this.percentsTotal = 0;
 		this.map = {};
 		this.walls = {};
-		this.lights = {};
+		this.cameras = {};
+		this.doors = {};
 		this.litUp = {};
 		this.known = {};
+		this.pressure = 101;
 		Game.generateMap();
-		Game.addMessage('You see nothing');
-		Game.player.seeNearby();
-		Game.printStats(true);
+
+		this.display.clear();
+		let texts = [
+			['You wake up in locker at the space station.', 'lightblue'],
+			['You hear some angry noises around.', 'lightblue'],
+			['You need to find the capsule and escape.', 'lightblue'],
+			['Press [F] to start', 'white'],
+		];
+
+		let x = Math.floor((WIDTH + EXTRA_WIDTH) / 2);
+		let y = Math.floor(HEIGHT / 2) - 2;
+		for (let i = 0; i < texts.length; i++) {
+			let text = texts[i][0];
+			let color = texts[i][1];
+			let x1 = x - Math.floor(text.length / 2);
+			y += this.display.drawText(x1, y, makeColored(text, color));
+		}
 	},
 };
-
-Game.printStats = function() {
-	let OFFSET = WIDTH + 5;
-	let TOP_OFFSET = 1;
-	let status = {
-		1: '%c{gray}Dead%c{}',
-		3: '%c{red}Lethally Wounded%c{}',
-		5: '%c{orange}Severely Wounded%c{}',
-		8: '%c{gold}Wounded%c{}',
-		10: '%c{yellow}Slightly Wounded%c{}',
-	};
-
-	let text = '%c{green}Normal%c{}';
-	for (let key in status) {
-		if (Game.player.hp < key) {
-			text = status[key];
-			break;
-		}
-	}
-
-	this.display.draw(OFFSET + 2, TOP_OFFSET, 'Health: ');
-	this.display.drawText(OFFSET + 6, TOP_OFFSET, text);
-	TOP_OFFSET += 2;
-
-	this.display.draw(OFFSET + 2, TOP_OFFSET, 'Ammo: ');
-	this.display.draw(OFFSET + 5, TOP_OFFSET, Game.player.ammo.toString(10), '#00ca37');
-	TOP_OFFSET += 2;
-	OFFSET += 5;
-
-	this.display.draw(OFFSET, TOP_OFFSET, 'Current score: ' + Game.score);
-	this.display.draw(OFFSET, TOP_OFFSET + 2, 'Turns taken: ' + Game.turns);
-	OFFSET += 1;
-	TOP_OFFSET += 4;
-
-	this.display.draw(OFFSET, TOP_OFFSET, Game.player.char + ' - human (you)', '#0f0');
-	this.display.draw(OFFSET, TOP_OFFSET + 1, CHAR_LOCKER + ' - locker', COLOR_LOCKER);
-	this.display.draw(OFFSET, TOP_OFFSET + 2, CHAR_LIGHT + ' - camera', COLOR_LIGHT);
-	this.display.draw(OFFSET, TOP_OFFSET + 3, CHAR_EGG+CHAR_HUGGER+CHAR_SOLDIER + ' - aliens', 'red');
-	this.display.draw(OFFSET, TOP_OFFSET + 4, '. - passage', DEFAULT_COLOR);
-	this.display.draw(OFFSET, TOP_OFFSET + 5, '# - wall', DEFAULT_COLOR);
-	TOP_OFFSET += 8;
-
-	this.display.draw(OFFSET, TOP_OFFSET, 'Quick help:', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 1, 'arrows to move in 4 directions', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 2, 'qweasdzc to move in 8 directions', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 3, 'v - wait a turn', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 4, 'f - interact with nearest', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 5, 'x - shoot to nearest', 'white');
-	this.display.draw(OFFSET, TOP_OFFSET + 6, 'h - full help', 'white');
-	OFFSET = WIDTH + 2;
-	TOP_OFFSET += 12;
-
-	let LIMIT = EXTRA_WIDTH - 3;
-	this.display.drawText(OFFSET, TOP_OFFSET-2, 'Messages:');
-	for(var i = 0; i < Game.messages.length; i++) {
-		let lines = this.display.drawText(OFFSET, TOP_OFFSET, Game.messages[i], LIMIT);
-		TOP_OFFSET += lines;
-	}
-};
-
-Game.printHelp = function() {
-	Game.display.clear();
-	Game.screen = 'help';
-	let x = 5;
-	let y = 1;
-	let limit = WIDTH - 10;
-	let lines = [
-		'Help Menu',
-		'',
-		'Actions',
-		' [cursor] - keys to move (or jump to locker).',
-		' [qweasdzc] - alternate movement keys.',
-		' [v] - wait a turn.',
-		' [x] - shoot to nearest enemy. Costs an ammo.',
-		' [f] - interact with nearest item. Search locker or switch the cameras.',
-		' [h] - open/close this help menu',
-		'',
-		'Rules',
-		'',
-		'The game proceeds in a turn-based fashion: you make a move, then each of your enemies makes a move.',
-		'Both you and your opponents have some amount of health. When enemy\'s health drops to zero, they die. When your wound ups to maximum, you lose the game.',
-		'You can jump into lockers (with movement keys), which lets you disappear from sight as long as you are inside a locker.',
-		'Enemies don\'t have eyes, but they have sonar. You can see sonar waves on your display.',
-		'Beware of huggers and soldiers. Destroy eggs immediately.',
-		'Main objective is to eliminate all enemies.',
-	];
-	for (let i = 0; i < lines.length; i++) {
-		let count = Game.display.drawText(x, y, lines[i], limit);
-		y += count;
-	}
-	Game.printStats();
-}
-
 window.addEventListener('keydown', Game.keyDown);
 
-Game.addMessage = function(message, noPretty=false) {
-	message += noPretty ? '' : '.';
-	Game.messages.push(message);
-	if (Game.messages.length > 10) {
-		Game.messages.shift();
-	}
-}
-Game.texts = [];
-Game.texts[UID_NOTHING] = 'nothing';
-Game.texts[UID_AMMO] = 'ammo';
-Game.texts[UID_DETECTOR] = 'detector';
-Game.texts[UID_MEDPAK] = 'medpack';
-Game.itemName = function(uid) {
-	return Game.texts[uid];
-};
+/*
+чтобы переключить камеру и залезть в шкаф - нужно зайти на клетку с ними
+датчик того, что игрок спрятался и что он стоит на предмете
+детектор! oOooOO0
+ключи к шкафам в других шкафах
+точка выхода из игры - шлюз с шатлом
+дополнительные очки за сэкономленные ячейки
+дверь можно захлопнуть перед солдатом, и он будет её выламывать
+*/

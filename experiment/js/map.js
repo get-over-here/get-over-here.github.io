@@ -1,3 +1,33 @@
+Game.getAroundCoords = function(obj, x, y) {
+	let around = [];
+	for (let dx = -1; dx <= 1; dx++) {
+		for (let dy = -1; dy <= 1; dy++) {
+			if (dx === 0 && dy === 0) {
+				continue;
+			}
+			let x0 = x + dx;
+			let y0 = y + dy;
+			let key = makeKey(x0, y0);
+			if (key in obj) {
+				around.push([x0, y0, obj[key]]);
+			}
+		}
+	}
+	return around;
+};
+Game.countAroundTypes = function(obj, x, y) {
+	let cells = this.getAroundCoords(obj, x, y);
+	let around = [];
+	for (let i = 0; i < cells.length; i++) {
+		let cell = cells[i][2];
+		if (!around[cell.type]) {
+			around[cell.type] = 0;
+		}
+		around[cell.type]++;
+	}
+	return around;
+};
+
 Game.getCellsAround = function(x, y, char = '') {
 	let around = [];
 	for (let dx = -1; dx <= 1; dx++) {
@@ -22,17 +52,17 @@ Game.countCellsAround = function(x, y) {
 	let around = [];
 	for (let i = 0; i < cells.length; i++) {
 		let cell = cells[i][2];
-		if (!around[cell.char]) {
-			around[cell.char] = 0;
+		if (!around[cell.type]) {
+			around[cell.type] = 0;
 		}
-		around[cell.char]++;
+		around[cell.type]++;
 	}
 	return around;
 };
 
 Game.isAccessible = function(x, y) {
 	let key = makeKey(x, y);
-	if (!(key in Game.map) || Game.map[key] instanceof Wall) {
+	if (!(key in Game.map) || Game.map[key].type === TYPE_WALL) {
 		return false;
 	}
 	return true;
@@ -62,9 +92,9 @@ Game.generateMap = function() {
 	this.rmap.create(digCallback.bind(this));
 
 	this.buildWalls();
-	this.generateLockers();
-	this.generateLights();
-	this.createPlayer();
+	// this.generateLockers();
+	this.generateEntities();
+	// this.createPlayer();
 
 
 	let types = [
@@ -75,7 +105,8 @@ Game.generateMap = function() {
 	];
 	let length = types.length;
 
-	this.enemiesCount = 0;
+	Game.enemiesCount = 0;
+	Game.enemiesMax = 0;
 	for(let i = 0; i < length; i++) {
 		let pos = randomIndex(types);
 		let type = CHAR_EGG;
@@ -85,8 +116,10 @@ Game.generateMap = function() {
 		let enemy = this.generateEnemy(type);
 		let key = makeKey(enemy.x, enemy.y);
 		this.enemies[key] = enemy;
-		this.enemiesCount++;
+		Game.enemiesMax++;
 	}
+	Game.percents = Game.percentsTotal;
+
 	this.recomputeLights();
 	this.drawMap();
 };
@@ -105,60 +138,89 @@ Game.buildWalls = function() {
 		}
 	}
 };
-Game.generateLockers = function() {
-	let items = [
-		UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO,
-		UID_MEDPAK ,UID_MEDPAK ,UID_MEDPAK ,UID_MEDPAK ,UID_MEDPAK,
-	];
-	let walls = Object.keys(this.walls);
-	let length = items.length;
-	for (let i = 0; i < length; i++) {
-		//limit infinity
-		let limit = 1000;
+Game.generateLockers = function(room, count, cb) {
+	let done = count;
+	for (let i = 0; i < count; i++) {
+		// four corners
+		let limit = 4;
 		while(limit > 0) {
 			limit--;
-			let index = randomIndex(walls);
-			let key = walls[index];
-			let cells = Game.getCellsAround(this.walls[key][0], this.walls[key][1], CHAR_FLOOR);
-			if (cells.length === 3) {
-				let x = cells[1][0];
-				let y = cells[1][1];
-				cells = Game.countCellsAround(cells[1][0], cells[1][1]);
-				if (cells[CHAR_WALL] < 4) {
-					let pos = randomIndex(items);
-					let item = UID_AMMO;
-					if (items.length > 0) {
-						item = items.splice(pos, 1)[0];
-					}
-					let key = makeKey(x, y);
-					this.map[key] = new Locker(x, y, item);
-					walls.splice(index, 1);
-					break;
-				}
+			let x = ROT.RNG.getUniformInt(0, 1) ? room.getLeft() : room.getRight();
+			let y = ROT.RNG.getUniformInt(0, 1) ? room.getTop() : room.getBottom();
+			let cells = Game.countAroundTypes(Game.doors, x, y);
+			if (!cells.door) {
+				cb(x, y);
+				done--;
+				break;
 			}
 		}
 	}
+	// notestablished count
+	return done;
 };
-Game.generateLights = function() {
+Game.generateEntities = function() {
+	let items = [
+		UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO, UID_AMMO,
+		UID_MEDPAK, UID_MEDPAK, UID_MEDPAK, UID_MEDPAK, UID_MEDPAK,
+		UID_DETECTOR, UID_DETECTOR, UID_DETECTOR,
+	];
+
+	let capsule = false;
 	let rooms = this.rmap.getRooms();
+	// lockers per room
+	let ratioDiff = items.length / rooms.length;
+	let ratio = ratioDiff;
+
 	for (let i = 0; i < rooms.length; i++) {
 		let room = rooms[i];
 
+		// cameras
 		let x = Math.floor((room.getRight() - room.getLeft()) / 2 + room.getLeft());
 		let y = Math.floor((room.getBottom() - room.getTop()) / 2 + room.getTop());
 
-		let key = makeKey(x, y);
-		let light = new Light(x, y);
-		this.map[key] = light;
-		this.lights[key] = light;
+		let entity;
+		if (!capsule) {
+			capsule = true;
+			entity = new EntityCapsule(x, y);
+		} else {
+			entity = new EntityCamera(x, y);
+		}
+		this.entities[entity.key] = entity;
+		this.cameras[entity.key] = entity;
+		Game.percentsTotal++;
+
+		room.getDoors(function(x, y) {
+			let solid = ROT.RNG.getUniformInt(0, 1) ? false : true;
+			let entity = new EntityDoor(x, y, solid);
+			Game.entities[entity.key] = entity;
+			Game.doors[entity.key] = entity;
+		});
+
+		// lockers
+		if (ratio >= 0) {
+			let count = Math.floor(ratio);
+			ratio -= count;
+			ratio += Game.generateLockers(room, count, function(x, y) {
+				let pos = randomIndex(items);
+				let item = UID_AMMO;
+				if (items.length > 0) {
+					item = items.splice(pos, 1)[0];
+				}
+				if (item === UID_DETECTOR || item === UID_MEDPAK) {
+					Game.percentsTotal++;
+				}
+				let entity = new EntityLocker(x, y, item);
+				Game.entities[entity.key] = entity;
+				if (!Game.player) {
+					Game.createPlayer(entity);
+				}
+			});
+		}
+		ratio += ratioDiff;
 	}
 };
-Game.createPlayer = function() {
-	var index = randomIndex(this.freeCells);
-	var key = this.freeCells.splice(index, 1)[0];
-	var x = key[0];
-	var y = key[1];
-	this.player = new Player(x, y);
+Game.createPlayer = function(entity) {
+	Game.player = new Player(entity.x, entity.y);
 };
 Game.generateEnemy = function(type) {
 	//limit infinity
@@ -166,11 +228,17 @@ Game.generateEnemy = function(type) {
 	while(limit > 0) {
 		limit--;
 		let index = randomIndex(this.freeCells);
-		if (Math.abs(this.freeCells[index][0] - this.player.x) <= STARTING_ENEMY_DISTANCE || Math.abs(this.freeCells[index][1] - this.player.y) <= STARTING_ENEMY_DISTANCE) {
+		let cell = this.freeCells[index];
+		if (Math.abs(cell[0] - this.player.x) <= STARTING_ENEMY_DISTANCE || Math.abs(cell[1] - this.player.y) <= STARTING_ENEMY_DISTANCE) {
 			continue;
 		}
-		let key = this.freeCells.splice(index, 1)[0];
-		return new Enemy(key[0], key[1], type);
+		let key = makeKey(cell[0], cell[1]);
+		let entity = Game.entities[key];
+		if (entity) {
+			continue;
+		}
+		this.freeCells.splice(index, 1);
+		return new Enemy(cell[0], cell[1], type);
 	}
 };
 Game.selectNextPatrolRoom = function(enemy) {
@@ -195,25 +263,6 @@ Game.selectNextPatrolRoom = function(enemy) {
 
 
 
-Game.isPassable = function(key) {
-	return (key in Game.map) && Game.map[key] !== HP_VASE && Game.map[key] !== MP_VASE && !WALLS.includes(Game.map[key]);
-};
-Game.passableCallback = function(x, y) {
-	return Game.isPassable(makeKey(x, y));
-};
-
-Game.isVisible = function(key) {
-	if (!(key in Game.map)) {
-		return false;
-	}
-	if (Game.map[key].solid) {
-		return false;
-	}
-	return true;
-};
-Game.visibleCallback = function(x, y) {
-	return Game.isVisible(makeKey(x, y));
-};
 
 
 Game.walkableCallback = function(x, y) {
@@ -230,14 +279,46 @@ Game.recomputeLightsKeys = function(canSee) {
 };
 Game.recomputeLights = function() {
 	this.litUp = {};
-	for(let key in this.lights) {
-		let entity = this.lights[key];
+	for(let key in this.cameras) {
+		let entity = this.cameras[key];
 		Game.recomputeLightsKeys(entity.canSee);
 	}
 	Game.recomputeLightsKeys(Game.player.canSee);
 };
 
-Game.updateLight = function(entity) {
+Game.isBreakable = function(key) {
+	if (!(key in Game.map)) {
+		return false;
+	}
+	if (Game.map[key].solid) {
+		return false;
+	}
+	if (Game.entities[key] && !Game.entities[key].hp) {
+		return false;
+	}
+	return true;
+};
+Game.breakableCallback = function(x, y) {
+	return Game.isBreakable(makeKey(x, y));
+};
+
+Game.isVisible = function(key) {
+	if (!(key in Game.map)) {
+		return false;
+	}
+	if (Game.map[key].solid) {
+		return false;
+	}
+	if (Game.entities[key] && Game.entities[key].solid) {
+		return false;
+	}
+	return true;
+};
+Game.visibleCallback = function(x, y) {
+	return Game.isVisible(makeKey(x, y));
+};
+Game.isPassable = Game.visibleCallback;
+Game.updateLights = function(entity) {
 	let canSee = {};
 	let fov = new ROT.FOV.PreciseShadowcasting(Game.visibleCallback);
 	let visibilityCallback = function(x, y, distance, dummy) {
@@ -245,64 +326,4 @@ Game.updateLight = function(entity) {
 	};
 	fov.compute(entity.x, entity.y, LIGHT_RADIUS, visibilityCallback);
 	return canSee;
-};
-
-Game.drawChar = function(entity, litUp, known) {
-	if (!known) {
-		return;
-	}
-	if (litUp) {
-		this.display.draw(entity.x, entity.y, entity.char, entity.colorOn, COLOR_SHINING);
-	} else {
-		this.display.draw(entity.x, entity.y, entity.char, entity.colorOff);
-	}
-};
-
-Game.drawMap = function() {
-	if (Game.screen === 'win') {
-		Game.endLevel();
-		return;
-	}
-	if (Game.screen === 'lose') {
-		Game.gameOver();
-		return;
-	}
-	this.display.clear();
-	for (let key in this.map) {
-		this.drawChar(this.map[key], key in this.litUp, key in this.known);
-	}
-	for (let key in this.enemies) {
-		let visible = key in this.litUp;
-		let enemy = this.enemies[key];
-		if (visible) {
-			if (!Animator.running) {
-				for (let i = 0; i < enemy.fov.length; i++) {
-					let [x, y] = enemy.fov[i];
-					let key = makeKey(x, y);
-					if (key in this.litUp) {
-						if (!(key in this.enemies)) {
-							this.display.draw(x, y, CHAR_FLOOR, COLOR_ENEMY, COLOR_SHINING);
-						}
-					}
-				}
-			}
-			this.drawChar(this.enemies[key], visible, visible);
-		}
-		if (this.debug) {
-			/*
-			if (enemy.path) {
-				for (let i = 0; i < enemy.path.length; i++) {
-					let [x, y] = enemy.path[i];
-					this.display.draw(x, y, '+', 'pink');
-				}
-			}
-			*/
-			this.drawChar(this.enemies[key], true, true);
-		}
-
-	}
-	this.drawChar(this.player, true, true);
-	if (this.player) {
-		this.printStats();
-	}
 };
