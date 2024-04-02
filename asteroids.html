@@ -1,0 +1,412 @@
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=0">
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		body {
+			background: #333333;
+		}
+		canvas {
+			touch-action: none;
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			margin-right: -50%;
+			transform: translate(-50%, -50%);
+		}
+	</style>
+</head>
+<body>
+	<canvas></canvas>
+	<script>
+	(()=>{
+		let enemies = [];
+		let isMobile = false;
+		let isFullscreen = false;
+		let offsetX = 0;
+		let offsetY = 0;
+		let mts = 100;
+		let wait = 0;
+		let waitMax = 30;
+		let eSpeed = 1;
+		let eCount = 0;
+		let fontSize = 16;
+		let tileSize = 16;
+		let screenWidth = 640;
+		let screenHeight = 480;
+		let maxMoveX = screenWidth;
+		let maxMoveY = screenHeight;
+		let px = maxMoveX/2;
+		let py = maxMoveY-32;
+		let playerKeySpeed = 2;
+		let playerAxe0Speed = 0;
+		let playerAxe1Speed = 0;
+		let score = 0;
+		let lastScore = 0;
+		let isStartGame = true;
+		let isGameOver = false;
+		let gameOverText = 'Press something to start';
+		let cnv = document.querySelector('canvas');
+		cnv.width = screenWidth;
+		cnv.height = screenHeight;
+		let ctx = cnv.getContext('2d');
+		ctx.font = `${fontSize}pt monospace`;
+		ctx.textBaseline = 'top';
+		ctx.textAlign = 'left';
+
+		let controls = (move, speed, isAxis = false)=>{
+			if (move.x === 0 && move.y === 0){
+				return;
+			}
+			if (!isAxis && move.x !== 0 && move.y !== 0){
+				move.x *= Math.SQRT1_2;
+				move.y *= Math.SQRT1_2;
+			}
+			px += speed * move.x;
+			if (px < 0) {
+				px = 0;
+			}
+			if (px >= maxMoveX - tileSize) {
+				px = maxMoveX - tileSize;
+			}
+			py += speed * move.y;
+			if (py < 0) {
+				pY = 0;
+			}
+			if (py >= maxMoveY - tileSize) {
+				py = maxMoveY - tileSize;
+			}
+		}
+		// keyboard
+		let keys = {};
+		let keyboards = ()=>{
+			let move = {x:0,y:0};
+			if (keys.W) {
+				move.y = -1;
+			} else if (keys.S) {
+				move.y = +1;
+			}
+			if (keys.A) {
+				move.x = -1;
+			} else if (keys.D) {
+				move.x = +1;
+			}
+			controls(move, playerKeySpeed);
+		}
+		let keydown = (code)=>{
+			if (isGameOver){
+				restart();
+				return;
+			}
+			keys[code] = 1;
+		};
+		let keyup = (code)=>{
+			keys[code] = 0;
+		};
+		let click = (e)=>{
+			if (isGameOver){
+				restart();
+				return;
+			}
+		};
+		window.addEventListener('keydown',e=>keydown(e.code[3]));
+		window.addEventListener('keyup',e=>keyup(e.code[3]));
+		window.addEventListener('click',e=>click(e));
+
+		// gamepad
+		let gamepadPressed = (b)=>{
+			if (typeof b === 'object') {
+				return b.pressed;
+			}
+			return b === 1.0;
+		}
+		let checkXBoxGamepad = (gp)=>{
+			if (isGameOver){
+				for (let i = 0; i < gp.buttons.length; i++) {
+					if (gamepadPressed(gp.buttons[i])){
+						restart();
+					}
+				}
+				return;
+			}
+			// 3-0-2-1: YAXB
+			let move = {x:0,y:0};
+			if (gamepadPressed(gp.buttons[12])) {
+				move.y = -1;
+			} else if (gamepadPressed(gp.buttons[13])) {
+				move.y = +1;
+			}
+			if (gamepadPressed(gp.buttons[14])) {
+				move.x = -1;
+			} else if (gamepadPressed(gp.buttons[15])) {
+				move.x = +1;
+			}
+			if (move.x === 0 && move.y === 0){
+				move.x = playerKeySpeed * Math.floor(gp.axes[0]*10)/10;
+				move.y = playerKeySpeed * Math.floor(gp.axes[1]*10)/10;
+				controls(move, 1, true);
+			} else {
+				controls(move, playerKeySpeed);
+			}
+		}
+		let checkGamepad = (gp)=>{
+			checkXBoxGamepad(gp);
+		}
+		let checkGamepads = ()=>{
+			const gamepads = navigator.getGamepads();
+			if (!gamepads) {
+				return;
+			}
+			for (let i = 0; i < gamepads.length; i++) {
+				if (gamepads[i]) {
+					checkGamepad(gamepads[i]);
+				}
+			}
+		}
+		let gamepadTip = '';
+		window.addEventListener('gamepadconnected', (e) => {
+			gamepadTip = `${e.gamepad.id}`;
+			setTimeout(()=>{
+				gamepadTip = '';
+			}, 5000);
+		});
+
+		// touch
+		let mobileButtonsRebuild = ()=>{
+			mobileButtons = [
+				{
+					key: 'W',
+					x: 0,
+					y: cnv.height-mts*2,
+				},
+				{
+					key: 'S',
+					x: 0,
+					y: cnv.height-mts,
+				},
+				{
+					key: 'A',
+					x: cnv.width-mts*2,
+					y: cnv.height-mts,
+				},
+				{
+					key: 'D',
+					x: cnv.width-mts,
+					y: cnv.height-mts,
+				},
+			];
+		}
+		let touchPoints = [];
+		let handleNormalscreen = ()=>{
+			let rect = cnv.getBoundingClientRect();
+			offsetX = rect.left;
+			offsetY = rect.top;
+		};
+		let handleFullscreen = ()=>{
+			screenWidth = window.innerWidth;
+			screenHeight = window.innerHeight;
+			maxMoveX = screenWidth - tileSize;
+			maxMoveY = screenHeight - tileSize;
+			cnv.width = screenWidth;
+			cnv.height = screenHeight;
+			offsetX = 0;
+			offsetY = 0;
+			mobileButtonsRebuild();
+			px = maxMoveX/2;
+			py = maxMoveY-32;
+			fontSize = screenHeight/20;
+			ctx.font = `${fontSize}pt monospace`;
+		};
+		let checkTouch = (t)=>{
+			let tx = t.clientX - offsetX;
+			let ty = t.clientY - offsetY;
+			for (let i = 0; i < mobileButtons.length; i++) {
+				let mb = mobileButtons[i];
+				if (tx >= mb.x && tx <= mb.x + mts && ty >= mb.y && ty <= mb.y + mts) {
+					keys[mb.key] = 1;
+				}
+			}
+		}
+		let handleTouch = (e, checkFullScreen)=>{
+			if (e.touches.length === 0) {
+				touchPoints = [];
+				keys = {};
+				return;
+			}
+			if (!isMobile) {
+				handleNormalscreen();
+			}
+			isMobile = true;
+			if (!document.fullscreenElement && checkFullScreen) {
+				if (cnv.requestFullscreen) {
+					setTimeout(()=>{
+						cnv.requestFullscreen().then(handleFullscreen).catch((e)=>{});
+					}, 0);
+				}
+			}
+			if (isGameOver){
+				restart();
+				return;
+			}
+			touchPoints = [];
+			keys = {};
+			for (let i = 0; i < e.touches.length; i++) {
+				let t = e.touches[i];
+				checkTouch(t);
+				touchPoints.push({
+					x: t.clientX - offsetX,
+					y: t.clientY - offsetY,
+				});
+			}
+		};
+		cnv.addEventListener('touchstart', (e)=>handleTouch(e, true), {passive: true});
+		cnv.addEventListener('touchend',  (e)=>handleTouch(e, true));
+		cnv.addEventListener('touchmove', (e)=>handleTouch(e, false), {passive: true});
+		window.addEventListener('resize', handleFullscreen);
+		window.addEventListener('orientationchange', handleFullscreen);
+
+		// game
+		let rnd = (min, max)=>{
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+		let spawn = ()=>{
+			eCount++;
+			if (eCount % 10 === 0) {
+				eSpeed += eSpeed<10?0.1:0;
+			}
+			if (eCount % 20 === 0) {
+				waitMax -= waitMax>1?1:0;
+			}
+			enemies.push({
+				x: rnd(0, maxMoveX),
+				y: -32,
+				speed: eSpeed,
+			});
+		}
+		let tick = ()=>{
+			checkGamepads();
+			if (isGameOver){
+				return;
+			}
+			keyboards();
+			wait--;
+			if (wait < 0) {
+				wait = waitMax;
+				spawn();
+			}
+			for (let i = 0; i < enemies.length; i++) {
+				let a = enemies[i];
+				a.y += a.speed;
+				if (a.y > screenHeight) {
+					enemies.splice(i, 1);
+					score++;
+					if (lastScore < score) {
+						lastScore = score;
+					}
+				}
+				if (a.x < px + tileSize && a.x + tileSize > px && a.y < py + tileSize && a.y + tileSize > py) {
+					isGameOver = true;
+					return;
+				}
+			}
+		}
+		let draw = ()=>{
+			ctx.fillStyle = 'black';
+			ctx.fillRect(0, 0, screenWidth, screenHeight);
+			if (isGameOver){
+				ctx.fillStyle = 'red';
+				ctx.textAlign = 'center';
+				ctx.fillText(gameOverText, screenWidth/2, screenHeight/2);
+				if (!isStartGame) {
+					ctx.fillText(`SCORE: ${score}`, screenWidth/2, screenHeight/2+fontSize*3);
+				}
+				return;
+			}
+			if (isMobile){
+				if (!document.fullscreenElement) {
+					ctx.fillStyle = 'white';
+					ctx.textAlign = 'center';
+					ctx.fillText(`Touch to full screen`, screenWidth/2, screenHeight/2);
+					ctx.textAlign = 'left';
+				}
+				ctx.strokeStyle = 'gray';
+				for (let i = 0; i < mobileButtons.length; i++) {
+					let mb = mobileButtons[i];
+					ctx.strokeRect(mb.x, mb.y, mts, mts);
+				}
+				ctx.fillStyle = 'green';
+				for (let i = 0; i < touchPoints.length; i++) {
+					ctx.beginPath();
+					ctx.arc(touchPoints[i].x-tileSize, touchPoints[i].y-tileSize, tileSize*2, 0, 2*Math.PI);
+					ctx.fill();
+				}
+			}
+			ctx.fillStyle = 'white';
+			ctx.textAlign = 'left';
+			ctx.fillText(`SCORE: ${score}`, fontSize, fontSize);
+			ctx.fillText(`TOP: ${lastScore}`, fontSize, fontSize*3);
+			if (gamepadTip) {
+				ctx.textAlign = 'center';
+				ctx.fillText(gamepadTip, screenWidth/2, screenHeight-32);
+				ctx.textAlign = 'left';
+			}
+			ctx.fillStyle = 'white';
+			ctx.fillRect(px, py, tileSize, tileSize);
+			ctx.fillStyle = 'yellow';
+			for (let i = 0; i < enemies.length; i++) {
+				ctx.fillRect(enemies[i].x, enemies[i].y, tileSize, tileSize);
+			}
+		};
+		let tFPS = 60;
+		let tInterval = 1000/tFPS;
+		let tNext = 0;
+		let loop = (timestamp)=>{
+			let delta = timestamp - tNext;
+			if (delta > tInterval) {
+				tNext = timestamp - (delta % tInterval);
+				tick();
+				draw();
+			}
+			window.requestAnimationFrame(loop);
+		};
+		// init
+		let restartTimeout;
+		let restart = ()=>{
+			if (isStartGame) {
+				isGameOver = false;
+				isStartGame = false;
+				gameOverText = 'YOU DIED';
+				init();
+				return;
+			}
+			if (!restartTimeout) {
+				restartTimeout = setTimeout(()=>{
+					isGameOver = false;
+					init();
+				}, 1000);
+			}
+		}
+		let init = ()=>{
+			restartTimeout = null;
+			enemies = [];
+			wait = 0;
+			waitMax = 30;
+			eSpeed = 1;
+			eCount = 0;
+			px = maxMoveX/2;
+			py = maxMoveY-32;
+			lastScore = score;
+			score = 0;
+		};
+		mobileButtonsRebuild();
+		wait = waitMax;
+		isGameOver = true;
+		init();
+		window.requestAnimationFrame(loop);
+	})()
+	</script>
+</body>
+</html>
