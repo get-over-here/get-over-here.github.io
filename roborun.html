@@ -112,36 +112,41 @@
 			hitEnemy(player, enemy) {
 				this.restartLevel();
 			}
+			enterTouch(pointer, gameObject){
+				if (gameObject === this.touchUp) {
+					this.touches.up = 1;
+				} else if (gameObject === this.touchDown) {
+					this.touches.down = 1;
+				}
+				if (gameObject === this.touchLeft) {
+					this.touches.left = 1;
+				} else if (gameObject === this.touchRight) {
+					this.touches.right = 1;
+				}
+			}
+			leaveTouch(pointer, gameObject){
+				if (gameObject === this.touchUp) {
+					this.touches.up = 0;
+				} else if (gameObject === this.touchDown) {
+					this.touches.down = 0;
+				}
+				if (gameObject === this.touchLeft) {
+					this.touches.left = 0;
+				} else if (gameObject === this.touchRight) {
+					this.touches.right = 0;
+				}
+			}
 			createTouches(){
-				this.touchUp = this.add.graphics().setInteractive();
-				this.touchDown = this.add.graphics().setInteractive();
-				this.touchLeft = this.add.graphics().setInteractive();
-				this.touchRight = this.add.graphics().setInteractive();
+				this.input.addPointer(2);
+				this.touchUp = this.add.graphics();
+				this.touchDown = this.add.graphics();
+				this.touchLeft = this.add.graphics();
+				this.touchRight = this.add.graphics();
 				this.updateTouches();
-				this.input.on('gameobjectdown', (pointer, gameObject)=>{
-					if (gameObject === this.touchUp) {
-						this.touches.up = 1;
-					} else if (gameObject === this.touchDown) {
-						this.touches.down = 1;
-					}
-					if (gameObject === this.touchLeft) {
-						this.touches.left = 1;
-					} else if (gameObject === this.touchRight) {
-						this.touches.right = 1;
-					}
-				});
-				this.input.on('gameobjectup', (pointer, gameObject)=>{
-					if (gameObject === this.touchUp) {
-						this.touches.up = 0;
-					} else if (gameObject === this.touchDown) {
-						this.touches.down = 0;
-					}
-					if (gameObject === this.touchLeft) {
-						this.touches.left = 0;
-					} else if (gameObject === this.touchRight) {
-						this.touches.right = 0;
-					}
-				});
+				this.input.on('gameobjectdown', this.enterTouch.bind(this));
+				this.input.on('gameobjectover', this.enterTouch.bind(this));
+				this.input.on('gameobjectout', this.leaveTouch.bind(this));
+				this.input.on('gameobjectup', this.leaveTouch.bind(this));
 			}
 			updateTouch(touch){
 				touch.lineStyle(2, 0xffffff, 1);
