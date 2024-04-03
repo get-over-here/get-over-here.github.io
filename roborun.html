@@ -257,8 +257,8 @@
 					if (pad.axes.length) {
 						const axisH = pad.axes[0].getValue();
 						const axisV = pad.axes[1].getValue();
-						this.player.x += 1 * axisH;
-						this.player.y += 1 * axisV;
+						this.player.x += (this.tileSize/20) * axisH;
+						this.player.y += (this.tileSize/20) * axisV;
 					}
 				}
 				if (this.cursors.left.isDown || this.keys.A.isDown || pad.left || this.touches.left) {
