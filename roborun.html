@@ -80,7 +80,7 @@
 			makeEnemyRow(yPos){
 				let width = this.screenWidth;
 				let xPos = this.rng(0, this.screenWidth);
-				let vel = this.rng(100, 100);
+				let vel = this.tileSize*7;
 				vel = Math.random()>0.5 ? -1*vel : 1*vel;
 				this.makeEnemy(xPos, yPos, width, vel);
 				if (xPos > 0) {
