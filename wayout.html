@@ -1,0 +1,622 @@
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=0">
+	<style>
+		* {
+			touch-action: none;
+			margin: 0;
+			padding: 0;
+		}
+		body {
+			background: #333333;
+		}
+		canvas {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			margin-right: -50%;
+			transform: translate(-50%, -50%);
+		}
+	</style>
+</head>
+<body>
+	<canvas></canvas>
+	<script>
+		(()=>{
+			let screenWidth = 480;
+			let screenHeight = 640;
+			let isMobile = (navigator.maxTouchPoints || 'ontouchstart' in document.documentElement);
+
+			let cnv = document.querySelector('canvas');
+			cnv.width = screenWidth;
+			cnv.height = screenHeight;
+			let ctx = cnv.getContext('2d');
+			ctx.font = `0.5cm monospace`;
+			ctx.textBaseline = 'top';
+			ctx.textAlign = 'left';
+			let fontSize = +(ctx.font.match(/(.+)px/)?.[1])||'16';
+			let tileSize = fontSize;
+
+			let screenOffsetX = 0;
+			let screenOffsetY = 0;
+			let touchButtonSize = 100;
+			let touchButtonPos = 0;
+
+			let playerX = 0;
+			let playerY = 0;
+			let playerMove = {x: 0, y: 0};
+			let playerSpeed = 0;
+			let playerDefaultSpeed = 2;
+
+			let score = 0;
+			let bestScore = 0;
+			let labyrinth = [];
+			let labyrinthEnd = {x:0, y:0};
+			let roomSize = tileSize*2;
+			let riverSpeed = 5;
+			let maxPlayerX = screenWidth;
+			let maxPlayerY = screenHeight;
+
+			let rngSeed = 12345;
+			let rng = ()=>{
+				rngSeed = (214013*rngSeed+2531011)|0;
+				return (rngSeed>>16)&0x7FFF;
+			}
+			let rnd = ()=>{
+				let num = rng();
+				return num / 32768;
+			};
+			let rndLimit = (min, max)=>{
+				return Math.floor(rnd() * (max - min + 1)) + min;
+			};
+			let touchButtons = [];
+			let boxPoint = (x1, y1, w1, h1, x2, y2)=>{
+				return x2 >= x1 && x2 <= x1 + w1 && y2 >= y1 && y2 <= y1 + h1
+			}
+			function generateScreen() {
+				let labWidth = Math.floor(screenWidth/roomSize);
+				let labHeight = Math.floor(screenHeight/roomSize);
+				let bottomX = Math.floor(labWidth/2);
+				let bottomY = labHeight-1;
+				let topX = rndLimit(2, labWidth-2);
+				let topY = 0;
+				let path = randomPath(labWidth, labHeight, {x:bottomX, y:bottomY}, {x:topX, y:topY});
+				function addRoom(x, y){
+					let room = {
+						x: x*roomSize,
+						y: y*roomSize,
+						w: roomSize,
+						h: roomSize,
+						x1: x*roomSize+roomSize,
+						x2: y*roomSize+roomSize,
+					};
+					labyrinth.push(room);
+				}
+				labyrinth = [];
+				for(let x=0;x<labWidth;x++) {
+					for(let y=0;y<labHeight;y++){
+						if (path.contains({x,y})) {
+							addRoom(x, y);
+						}
+					}
+				}
+				playerX = bottomX*roomSize + tileSize / 2;
+				playerY = bottomY*roomSize + tileSize / 2;
+			}
+			let addScore = ()=>{
+				if (playerSpeed === 0){
+					return;
+				}
+				if (isWallHit) {
+					return;
+				}
+				score++;
+				if (bestScore < score) {
+					bestScore = score;
+				}
+			};
+			let processControls = ()=>{
+				playerSpeed = playerDefaultSpeed;
+				resetPlayerControls();
+				if (actions.up){
+					playerMove.y = -playerSpeed;
+				} else if (actions.down){
+					playerMove.y = playerSpeed;
+				} else if (actions.left){
+					playerMove.x = -playerSpeed;
+				} else if (actions.right){
+					playerMove.x = playerSpeed;
+				}
+				resetActions();
+			};
+			let movePlayer = (move, speed, isAxis = false)=>{
+				if (isWallHit) {
+					return;
+				}
+				playerX += playerMove.x;
+				playerY += playerMove.y;
+			};
+			let resetPlayerControls = ()=>{
+				playerMove = {x:0, y:0};
+			}
+			let switchScreen = (name)=>{
+				resetActions();
+				currentScreen = name;
+			};
+			let isWallHit = false;
+			let Screens = {
+				intro:()=>{
+					let x = screenWidth/2;
+					let y = screenHeight/2;
+					ctx.textAlign = 'center';
+					ctx.fillStyle = 'white';
+					ctx.fillText('WAY OUT', x, y);
+					ctx.fillStyle = 'gray';
+					ctx.fillText('Touch to start', x, y+fontSize*2);
+					ctx.textAlign = 'left';
+					if (isActed()){
+						resetActions();
+						resetPlayerControls();
+						nextLevel();
+						switchScreen('play');
+					}
+				},
+				play:()=>{
+					movePlayer();
+					if (playerY <= roomSize) {
+						nextLevel();
+					}
+					addScore();
+					let inFlow = 0;
+					ctx.fillStyle = '#222299';
+					for (let i = 0; i < labyrinth.length; i++) {
+						let r = labyrinth[i];
+						if (r.y < roomSize) {
+							ctx.fillStyle = '#2222FF';
+						} else {
+							ctx.fillStyle = '#222299';
+						}
+						ctx.fillRect(r.x, r.y, r.w+1, r.h+1);
+						if (boxPoint(r.x, r.y, r.w, r.h, playerX, playerY)){
+							inFlow++;
+						}
+						if (boxPoint(r.x, r.y, r.w, r.h, playerX+tileSize, playerY)){
+							inFlow++;
+						}
+						if (boxPoint(r.x, r.y, r.w, r.h, playerX, playerY+tileSize)){
+							inFlow++;
+						}
+						if (boxPoint(r.x, r.y, r.w, r.h, playerX+tileSize, playerY+tileSize)){
+							inFlow++;
+						}
+					}
+					ctx.fillStyle = 'lightgreen';
+					ctx.textAlign = 'left';
+					ctx.fillText(`$${score}`, 0, fontSize);
+					ctx.fillStyle = 'yellow';
+					ctx.textAlign = 'right';
+					ctx.fillText(`@${bestScore}`, screenWidth, fontSize);
+					ctx.fillStyle = 'white';
+					ctx.fillRect(playerX, playerY, tileSize, tileSize);
+					if (isWallHit) {
+						return;
+					}
+					if (inFlow < 4) {
+						resetPlayerControls();
+						isWallHit = true;
+						setTimeout(()=>{
+							switchScreen('lose');
+							setTimeout(()=>{
+								init();
+								nextLevel();
+								switchScreen('play');
+							}, 1000);
+						}, 500);
+						return;
+					}
+				},
+				lose:()=>{
+					ctx.fillStyle = 'red';
+					ctx.textAlign = 'center';
+					ctx.fillText('YOU DIED', screenWidth/2, screenHeight/2);
+					if (score < bestScore) {
+						ctx.fillStyle = 'green';
+					} else {
+						ctx.fillStyle = 'yellow';
+					}
+					ctx.fillText(`$${score}`, screenWidth/2, screenHeight/2+tileSize);
+					ctx.textAlign = 'left';
+				},
+			};
+			let currentScreen = 'intro';
+			let isActed = ()=>{
+				let flag = actions.isActed;
+				actions.isActed = false;
+				return flag;
+			};
+			let actions = {
+				isActed: false,
+				up:      false,
+				down:    false,
+				left:    false,
+				right:   false,
+				button1: false,
+				button2: false,
+			};
+			let setAction = (name)=>{
+				if (name !== 'isActed') {
+					resetPlayerControls();
+				}
+				actions.isActed = true;
+				actions[name] = true;
+			};
+			let getAction = (name)=>{
+				return actions[name] || false;
+			};
+			let resetActions = ()=>{
+				for (let key in actions) {
+					if (key !== 'isActed') {
+						actions[key] = false;
+					}
+				}
+			};
+			let onKeyDown = (code)=>{
+				let buttons = {
+					KeyW: 'up',
+					ArrowUp: 'up',
+					KeyS: 'down',
+					ArrowDown: 'down',
+					KeyA: 'left',
+					ArrowLeft: 'left',
+					KeyD: 'right',
+					ArrowRight: 'right',
+				}
+				if (buttons[code]) {
+					resetActions();
+					setAction('isKeyboard');
+					setAction(buttons[code]);
+				}
+				if (getAction('isKeyboard')){
+					processControls();
+				}
+			};
+			let onKeyUp = (code)=>{
+			};
+			let onClick = (e)=>{
+				setAction('isActed');
+			};
+			let touchButtonsAtLeft = true;
+			let touchButtonsCreate = ()=>{
+				let bottomY = screenHeight - touchButtonPos * 2;
+				touchButtons = [
+					{
+						key: 'left',
+						x: 0,
+						y: bottomY,
+					},
+					{
+						key: 'down',
+						x: touchButtonSize,
+						y: bottomY,
+					},
+					{
+						key: 'right',
+						x: touchButtonSize*2,
+						y: bottomY,
+					},
+					{
+						key: 'up',
+						x: touchButtonSize,
+						y: bottomY-touchButtonSize,
+					},
+				];
+			};
+			let onResize = ()=>{
+				maxPlayerX = screenWidth - tileSize;
+				maxPlayerY = screenHeight - tileSize;
+				cnv.width = screenWidth;
+				cnv.height = screenHeight;
+				fontSize = screenWidth/20;
+				tileSize = screenWidth/30;
+				roomSize = tileSize*3;
+				touchButtonSize = Math.max(50, tileSize*4);
+				touchButtonPos = touchButtonSize / 2;
+				ctx.font = `${fontSize}pt monospace`;
+				init();
+			}
+			let handleNormalscreen = ()=>{
+				let rect = cnv.getBoundingClientRect();
+				screenOffsetX = rect.left;
+				screenOffsetY = rect.top;
+			};
+			let handleFullscreen = ()=>{
+				screenWidth = window.innerWidth;
+				screenHeight = window.innerHeight;
+				screenOffsetX = 0;
+				screenOffsetY = 0;
+				onResize();
+				if (isMobile) {
+					touchButtonsCreate();
+				}
+			};
+			let checkTouch = (t)=>{
+				let tx = t.clientX - screenOffsetX;
+				let ty = t.clientY - screenOffsetY;
+				touchPoints.push({
+					x: tx,
+					y: ty,
+				});
+				for (let i = 0; i < touchButtons.length; i++) {
+					let tb = touchButtons[i];
+					if (tx >= tb.x && tx <= tb.x + touchButtonSize && ty >= tb.y && ty <= tb.y + touchButtonSize) {
+						setAction('isTouch');
+						setAction(tb.key);
+					}
+				}
+			};
+			let touchPoints = [];
+			let handleTouch = (e, checkFullScreen)=>{
+				if (!document.fullscreenElement && checkFullScreen) {
+					touchButtonsCreate();
+					if (cnv.requestFullscreen) {
+						cnv.requestFullscreen().then(handleFullscreen).catch((e)=>{});
+					}
+				}
+				if (e.touches.length === 0) {
+					resetActions();
+					touchPoints = [];
+					return;
+				}
+				if (!isMobile) {
+					handleNormalscreen();
+				}
+				isMobile = true;
+				setAction('isActed');
+				touchPoints = [];
+				resetActions();
+				for (let i = 0; i < e.touches.length; i++) {
+					checkTouch(e.touches[i]);
+				}
+				if (getAction('isTouch')){
+					processControls();
+				}
+			};
+			let gamepadButtonPressed = (b)=>{
+				if (typeof b === 'object') {
+					return b.pressed;
+				}
+				return b === 1.0;
+			};
+			let checkXBoxGamepad = (gp)=>{
+				let buttons = {
+					3: 'up',
+					0: 'down',
+					2: 'left',
+					1: 'right',
+					12: 'up',
+					13: 'down',
+					14: 'left',
+					15: 'right',
+				}
+				for (let i = 0; i < gp.buttons.length; i++) {
+					if (gamepadButtonPressed(gp.buttons[i])){
+						if (buttons[i]) {
+							resetActions();
+							setAction('isGamepad');
+							setAction(buttons[i]);
+						}
+					}
+				}
+				if (getAction('isGamepad')){
+					processControls();
+				}
+			};
+			let checkGamepad = (gp)=>{
+				checkXBoxGamepad(gp);
+			};
+			let checkGamepads = ()=>{
+				const gamepads = navigator.getGamepads();
+				if (!gamepads) {
+					return;
+				}
+				for (let i = 0; i < gamepads.length; i++) {
+					if (gamepads[i]) {
+						checkGamepad(gamepads[i]);
+					}
+				}
+			};
+			let onGamepadConnected = (e)=>{
+				console.log(`${e.gamepad.id}`);
+			};
+
+			let draw = ()=>{
+				checkGamepads();
+				ctx.fillStyle = 'black';
+				ctx.fillRect(0, 0, screenWidth, screenHeight);
+				Screens[currentScreen]();
+				ctx.strokeStyle = 'gray';
+				for (let i = 0; i < touchButtons.length; i++) {
+					let tb = touchButtons[i];
+					ctx.strokeRect(tb.x, tb.y, touchButtonSize, touchButtonSize);
+				}
+				ctx.fillStyle = 'green';
+				for (let i = 0; i < touchPoints.length; i++) {
+					ctx.beginPath();
+					ctx.arc(touchPoints[i].x, touchPoints[i].y, tileSize, 0, 2*Math.PI);
+					ctx.fill();
+				}
+			};
+
+			let tFPS = 60;
+			let tInterval = 1000/tFPS;
+			let tNext = 0;
+
+			let loop = (timestamp)=>{
+				let delta = timestamp - tNext;
+				if (delta > tInterval) {
+					tNext = timestamp - (delta % tInterval);
+					draw();
+				}
+				window.requestAnimationFrame(loop);
+			};
+			let init = ()=>{
+				rngSeed = 12345;
+				playerDefaultSpeed = tileSize/10;
+				bestScore = score;
+				score = 0;
+			};
+			let nextLevel = ()=>{
+				playerSpeed = 0;
+				playerDefaultSpeed += tileSize/10*0.1;
+				roomSize = Math.floor(roomSize - tileSize/16);
+				if (roomSize < tileSize*2) {
+					roomSize = tileSize*2;
+				}
+				isWallHit = false;
+				generateScreen();
+				resetActions();
+				resetPlayerControls();
+			};
+			// https://github.com/BorisTheBrave/chiseled-random-paths/tree/master
+			const CellState = {
+				Open:1,
+				Blocked:2,
+				Forced:3,
+			};
+			const Cell = {x:0, y:0};
+			function setArrValue(arr, cell, val) {
+				let a2 = arr[cell.x];
+				if (a2 === undefined) {
+					a2 = arr[cell.x] = [];
+				}
+				arr[cell.x][cell.y] = val;
+			}
+			function getArrValue(arr, cell) {
+				return arr[cell.x]?.[cell.y];
+			}
+			function randomCell(cells) {
+				return cells[Math.floor(rnd() * cells.length)];
+			}
+			class CellSet {
+				cellToIndex = [];
+				cells = [];
+				contains(cell){
+					return this.cellToIndex[cell.x]?.[cell.y] !== undefined;
+				}
+				add(cell) {
+					if(cell === undefined){
+						// todo
+						throw new Error();
+					}
+					const index = this.cellToIndex[cell.x]?.[cell.y];
+					if (index === undefined) {
+						setArrValue(this.cellToIndex, cell, this.cells.length);
+						this.cells.push(cell);
+					}
+				}
+				remove(cell) {
+					const index = this.cellToIndex[cell.x]?.[cell.y];
+					if (index !== undefined) {
+						this.cellToIndex[cell.x][cell.y] = undefined;
+						if (index < this.cells.length - 1) {
+							const other = this.cells[index] = this.cells[this.cells.length - 1];
+							this.cellToIndex[other.x][other.y] = index;
+						}
+						this.cells.pop();
+					}
+				}
+			}
+			function findPath(width, height, from, to, cellStates) {
+				function getNeighbours(cell){
+					const {x, y} = cell;
+					const n = [];
+					if (x > 0) n.push({x: x - 1, y});
+					if (x < width - 1) n.push({x: x + 1, y});
+					if (y > 0) n.push({x, y: y - 1});
+					if (y < height - 1) n.push({x, y: y + 1});
+					return n.filter(c => cellStates[c.x][c.y] !== CellState.Blocked);
+				}
+				let distances = [];
+				let currentCells = [from];
+				let currentDist = 0;
+				let nextCells = [];
+				setArrValue(distances, from, 0);
+				while(true) {
+					for (const cell of currentCells) {
+						for (const neighbour of getNeighbours(cell)) {
+							if(getArrValue(distances, neighbour) !== undefined) continue;
+							nextCells.push(neighbour);
+							setArrValue(distances, neighbour, currentDist + 1);
+						}
+					}
+					currentCells = nextCells;
+					nextCells = [];
+					currentDist += 1;
+					if(getArrValue(distances, to) !== undefined) break;
+					if(currentCells.length == 0) return null;
+				}
+				const path = new CellSet();
+				let c = to;
+				path.add(c);
+				while(currentDist > 0) {
+					const ns = getNeighbours(c);
+					const nsTowardsStart = ns.filter(x => getArrValue(distances, x) === currentDist - 1)
+					c = randomCell(nsTowardsStart);
+					path.add(c);
+					currentDist -= 1;
+				}
+				return path;
+			}
+			function randomPath(width, height, from, to){
+				let cellStates = [];
+				let openCells = new CellSet();
+				for (let x=0; x < width; x++) {
+					cellStates[x] = [];
+					for (let y = 0; y < height; y++) {
+						openCells.add({x,y});
+						cellStates[x][y] = CellState.Open;
+					}
+				}
+				openCells.remove(from);
+				openCells.remove(to);
+				cellStates[from.x][from.y] = CellState.Forced;
+				cellStates[to.x][to.y] = CellState.Forced;
+				function find_path(){
+					return findPath(width, height, from, to, cellStates);
+				}
+				let witness = find_path();
+				while (true) {
+					if (openCells.cells.length === 0) {
+						return witness;
+					}
+					let c = randomCell(openCells.cells);
+					cellStates[c.x][c.y] = CellState.Blocked;
+					openCells.remove(c);
+					if (witness.contains(c)){
+						const newPath = find_path();
+						if (newPath === null) {
+							cellStates[c.x][c.y] = CellState.Forced;
+						} else {
+							witness = newPath;
+						}
+					}
+				}
+			}
+			onResize();
+
+			cnv.addEventListener('touchstart', e=>handleTouch(e, false), {passive: true});
+			cnv.addEventListener('touchend',  e=>handleTouch(e, true));
+			cnv.addEventListener('touchcancel',  e=>handleTouch(e, true));
+			cnv.addEventListener('touchmove', e=>handleTouch(e, false), {passive: true});
+			window.addEventListener('keydown',e=>onKeyDown(e.code));
+			window.addEventListener('keyup',e=>onKeyUp(e.code));
+			window.addEventListener('click',e=>onClick(e));
+			window.addEventListener('contextmenu', e=>e.preventDefault());
+			window.addEventListener('resize', onResize);
+			window.addEventListener('orientationchange', handleFullscreen);
+			window.addEventListener('gamepadconnected', e=>onGamepadConnected(e));
+			window.requestAnimationFrame(loop);
+		})();
+</script>
+</body>
+</html>
