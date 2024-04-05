@@ -1,0 +1,565 @@
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=0">
+	<style>
+		* {
+			touch-action: none;
+			margin: 0;
+			padding: 0;
+		}
+		body {
+			background: #333333;
+		}
+		canvas {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			margin-right: -50%;
+			transform: translate(-50%, -50%);
+		}
+	</style>
+</head>
+<body>
+	<canvas></canvas>
+	<script>
+		(()=>{
+			let screenWidth = 640;
+			let screenHeight = 480;
+			let isMobile = (navigator.maxTouchPoints || 'ontouchstart' in document.documentElement);
+
+			let cnv = document.querySelector('canvas');
+			cnv.width = screenWidth;
+			cnv.height = screenHeight;
+			let ctx = cnv.getContext('2d');
+			ctx.font = `0.5cm monospace`;
+			ctx.textBaseline = 'top';
+			ctx.textAlign = 'left';
+			let fontSize = +(ctx.font.match(/(.+)px/)?.[1])||'16';
+			let tileSize = fontSize;
+
+			let screenOffsetX = 0;
+			let screenOffsetY = 0;
+			let touchButtons = [];
+			let touchButtonSize = 100;
+			let touchButtonPos = 0;
+
+			let playerX = 0;
+			let playerY = 0;
+			let playerMove = {x: 0};
+			let playerSpeed = 2;
+			let bullets = [];
+			let isPaused = true;
+			let score = 0;
+			let bestScore = 0;
+			let maxPlayerX = screenWidth;
+			let currentScreen = 'intro';
+
+			let sprites = {
+				enemy: [
+					't9t9t4b4t9b1t1b1r1b3r1t1b1t6b4r1b1r1b3t5b1t2b6t2b1t4b1t1b1t1b1w1b1w1t1b1t1b1t4b1t1b1t2b1t1b1t1b1t1b1t2',
+					't9t9t4b4t9b1t1b1r1b3r1t1b1t5b5r1b1r1b3t5b1t2b7t1b1t4b1t1b1t1b1w1b1w1t1b1t1b1t5b1t3b1t1b1t2b1t3',
+					't9t9t4b4t9b1t1b1r1b3r1t1b1t6b4r1b1r1b3t6b1t1b6t2b1t5b1t1b2w1b1w1t1b1t1b1t4b1t2b1t1b1t1b1t1b1t4',
+					't6b4t9b1t1b1r1b3r1t1b1t6b4r1b1r1b3t5b1t2b6t2b1t4b1t1b1t1b1w1b1w1t1b1t1b1t4b1t1b1t2b1t1b1t1b1t1b1t5b1t1b1t4b1t1b1t3',
+				],
+				bullet: [
+					't6r4t9t1r8t7r9r1t5r4z4r4t3r4z2p2z2r4t2r3z2p4z2r3t2r4z1p4z1r4t3r3z2p2z2r3t4r4z4r5t4r4z2r6t4r9r3t5r9r2t6r9t6r1z1r1t2r1z2r1t6r1z1r1t3r2z1r1t7r1t5z1r1t9r1t4r1t9t5r1t9t6r1t9t3r1t9t5z1r1t9t5r1z1t9t6r1t9t7r1t9t9t6',
+					't6r4t9t1r8t7r9r1t5r3z6r3t3r3z2p4z2r3t2r2z2p6z2r2t2r3z1p6z1r3t3r2z2p4z2r2t4r3z6r4t4r3z4r5t4r9r3t5r9r1t6r1z1r4z2r1t7z1r1t3r2z1r1t6r3t4z1r1t9r1t4r1t9t5r1t9t6r1t9t3r1t9t5z1r1t9t5r1z1t9t6r1t9t7r1t9t9t9t9t4',
+					't6r4t9t1r8t7r9r1t5r2z8r2t3r2z2p6z2r2t2r1z2p8z2r1t2r2z1p8z1r2t3r1z2p6z2r2t3r2z8r3t4r2z6r4t4r9r2t6r1z1r4z2r1t7z1r6z1r1t6r3t4z1r1t9r1t4r1t9t5r1t9t6r1t9t3r1t9t5z1r1t9t5r1z1t9t6r1t9t7r1t9t9t9t9t9t9t2',
+					't6r4t9t1r8t7r9r1t5r3z6r3t3r3z2p4z2r3t2r2z2p6z2r2t2r3z1p6z1r3t3r2z2p4z2r2t4r3z6r4t4r3z4r5t4r9r3t5r9r1t6r1z1r4z2r1t7z1r1t3r2z1r1t6r3t4z1r1t9r1t4r1t9t5r1t9t6r1t9t3r1t9t5z1r1t9t5r1z1t9t6r1t9t7r1t9t9t9t9t4',
+				],
+			};
+
+			let rnd = (min, max)=>{
+				return Math.floor(Math.random() * (max - min + 1)) + min;
+			};
+			let rndArr = (arr)=>{
+				return arr[Math.floor(Math.random() * arr.length)];
+			}
+			let boxPoint = (x1, y1, w1, h1, x2, y2)=>{
+				return x2 >= x1 && x2 <= x1 + w1 && y2 >= y1 && y2 <= y1 + h1
+			};
+			let boxBox = (x1, y1, w1, h1, x2, y2, w2, h2)=>{
+			    return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2
+			};
+			function decode(rle) {
+				return rle.replace(/(\w)(\d+)/g, (_, char, count) => char.repeat(count));
+			}
+			let drawPalette = {
+				t: 'transparent',
+				b: 'black',
+				r: 'red',
+				w: 'white',
+				p: '#FFAFAF',
+				z: '#FF7373',
+			};
+			const render = (rle, sX, sY, width, scale = 1) => {
+				[...decode(rle)].forEach((c, i) => {
+					const color = drawPalette[c];
+					const column = i % width;
+					const row = Math.floor(i / width);
+					if (color) {
+				  		ctx.fillStyle = color;
+				  		ctx.fillRect(
+							Math.floor(sX + column * scale),
+							Math.floor(sY + row * scale),
+							scale + scale/2,
+							scale + scale/2,
+				  		);
+					}
+			  	});
+			};
+			let renderSprite = (sprite, sX, sY, width, scale = 1)=>{
+				let rle = sprites[sprite][spriteFrames[sprite]];
+				render(rle, sX, sY, width, scale);
+			}
+			let print = (text, x, y, color = '')=>{
+				let oldColor = ctx.fillStyle;
+				if (color !== '') {
+					ctx.fillStyle = color;
+				}
+				ctx.fillText(text, x, y);
+				if (color !== '') {
+					ctx.fillStyle = oldColor;
+				}
+			};
+			let addScore = ()=>{
+				if (isPaused) {
+					return;
+				}
+				score++;
+				if (bestScore < score) {
+					bestScore = score;
+				}
+			};
+			let bulletSpeed = 0;
+			let bulletTimeout = 0;
+			let bulletDefaultTimeout = 30;
+			let shootBullet = ()=>{
+				if (bullets.length < 10 && bulletTimeout < 0) {
+					bullets.push({
+						x: playerX + tileSize/2 - bulletSizeX/2,
+						y: playerY - tileSize,
+						w: bulletSizeX,
+						h: bulletSizeY,
+						speed: bulletSpeed,
+					});
+					bulletTimeout = bulletDefaultTimeout;
+				}
+			};
+			let movePlayer = ()=>{
+				if (isPaused) {
+					return;
+				}
+				playerX += playerMove.x;
+				if (playerX < tileSize){
+					playerX = tileSize;
+				}
+				if (playerX + tileSize > maxPlayerX) {
+					playerX = screenWidth - tileSize * 2;
+				}
+			};
+			let resetPlayer = ()=>{
+				playerMove = {x:0};
+			}
+			let enemiesTotal = 10;
+			let enemies = new Array(enemiesTotal).fill(null);
+			let enemyTimeout = 0;
+			let enemyDefaultTimeout = 50;
+			let spawnEnemy = (idx)=>{
+				let centerX = Math.floor(screenWidth/2);
+				let shiftX = enemiesTotal - Math.floor(enemiesTotal/2);
+				let posX = centerX - shiftX * tileSize * 2;
+				enemies[idx] = {
+					x: posX + (idx * tileSize * 2),
+					y: tileSize,
+					w: enemySizeX,
+					h: enemySizeY,
+					wh2: Math.floor(enemySizeX/2),
+					speed: Math.random() * enemySpeed + enemySpeed/2,
+				};
+			}
+			let checkEnemies = ()=>{
+				if (enemyTimeout < 0) {
+					let emptyCells = [];
+					enemies.forEach((val, idx)=>{
+						if (!val) {
+							emptyCells.push(idx);
+						}
+					});
+					if (emptyCells.length === 0) {
+						enemyTimeout = enemyDefaultTimeout;
+						return;
+					}
+					let idx = rndArr(emptyCells);
+					spawnEnemy(idx);
+					enemyTimeout = enemyDefaultTimeout;
+				}
+			}
+			let spriteDefaultTimeouts = {
+				enemy: 30,
+				bullet: 10,
+			};
+			let spriteTimeouts = {
+				enemy: 30,
+				bullet: 1,
+			};
+			let spriteFrames = {
+				enemy: 0,
+				bullet: 0,
+			};
+			let animateSprites = ()=>{
+				for (let key in sprites) {
+					spriteTimeouts[key]--;
+					if (spriteTimeouts[key] < 0) {
+						spriteTimeouts[key] = spriteDefaultTimeouts[key];
+						spriteFrames[key]++;
+						if (spriteFrames[key] >= sprites[key].length) {
+							spriteFrames[key] = 0;
+						}
+					}
+				}
+			}
+			let growScale = 1;
+			let growOffset = 0;
+			let growX;
+			let growY;
+			let growEnemy = ()=>{
+				ctx.fillStyle = 'red';
+				ctx.fillRect(0, 0, screenWidth, screenHeight);
+				if (growScale < 50) {
+					growScale++;
+					growX = growScale*16;
+					growY = growScale*8;
+				}
+				render(sprites.enemy[0], screenWidth/2-growX/2, screenHeight/2-growY/2, 16, growScale);
+			};
+			let switchScreen = (name)=>{
+				resetActions();
+				currentScreen = name;
+			};
+			let Screens = {
+				intro:()=>{
+					let x = screenWidth/2;
+					let y = screenHeight/2;
+					ctx.fillStyle = 'black';
+					ctx.fillRect(0, 0, screenWidth, screenHeight);
+					ctx.textAlign = 'center';
+					ctx.fillStyle = 'white';
+					print('TITO', x, y-fontSize);
+					print('&', x, y, 'yellow');
+					print('TARÁNTULAS', x, y+fontSize);
+					print('Touch to start', x, y+fontSize*3, 'gray');
+					if (hasAction()){
+						nextLevel();
+						switchScreen('play');
+					}
+				},
+				play:()=>{
+					ctx.fillStyle = '#444444';
+					ctx.fillRect(0, 0, screenWidth, screenHeight);
+					if (isPaused) {
+						growEnemy();
+						return;
+					}
+					bulletTimeout--;
+					enemyTimeout--;
+					movePlayer();
+					shootBullet();
+					checkEnemies();
+					animateSprites();
+
+					ctx.fillStyle = 'gray';
+					ctx.fillRect(0, 0, screenWidth, tileSize);
+
+					for (let i = 0; i < enemies.length; i++) {
+						let enemy = enemies[i];
+						if (!enemy) {
+							continue;
+						}
+						enemy.y += enemy.speed;
+						ctx.fillStyle = 'white';
+						ctx.fillRect(enemy.x + enemy.wh2, tileSize, 1, enemy.y);
+						renderSprite('enemy', enemy.x, enemy.y+enemy.h, 16, enemyScale);
+						if (enemy.y >= playerY - tileSize) {
+							isPaused = true;
+							setTimeout(()=>{
+								switchScreen('lose');
+								isPaused = false;
+								setTimeout(()=>{
+									init();
+									nextLevel();
+									switchScreen('play');
+								}, 1000);
+							}, 2000);
+							return;
+						}
+					}
+
+					for (let i = 0; i < bullets.length; i++) {
+						let bullet = bullets[i];
+						bullet.y -= bullet.speed;
+
+						renderSprite('bullet', bullet.x, bullet.y, 16, bulletScale);
+						if (bullet.y < 0 - bullet.h) {
+							bullets.splice(i, 1);
+						}
+						for (let j = 0; j < enemies.length; j++) {
+							let enemy = enemies[j];
+							if (enemy && boxBox(bullet.x, bullet.y, bullet.w, bullet.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+								bullets.splice(i, 1);
+								enemies[j] = null;
+								addScore();
+								spawnEnemy(j);
+							}
+						}
+					}
+
+					ctx.fillStyle = 'lightgreen';
+					ctx.textAlign = 'left';
+					ctx.fillText(`$${score}`, 0, fontSize*2);
+					ctx.fillStyle = 'yellow';
+					ctx.textAlign = 'right';
+					ctx.fillText(`@${bestScore}`, screenWidth, fontSize*2);
+					ctx.fillStyle = 'white';
+					ctx.fillRect(playerX, playerY, tileSize, tileSize);
+				},
+				lose:()=>{
+					ctx.fillStyle = '#444444';
+					ctx.fillRect(0, 0, screenWidth, screenHeight);
+					ctx.fillStyle = 'red';
+					ctx.textAlign = 'center';
+					ctx.fillText('YOU DIED', screenWidth/2, screenHeight/2);
+					if (score < bestScore) {
+						ctx.fillStyle = 'green';
+					} else {
+						ctx.fillStyle = 'yellow';
+					}
+					ctx.fillText(`$${score}`, screenWidth/2, screenHeight/2+tileSize);
+					ctx.textAlign = 'left';
+				},
+			};
+
+			let playerActions = {
+				isPressed: false,
+				up:        false,
+				down:      false,
+				left:      false,
+				right:     false,
+				button1:   false,
+				button2:   false,
+			};
+			let setAction = (name)=>{
+				playerActions.isPressed = true;
+				if (name) {
+					playerActions[name] = true;
+				}
+			};
+			let resetAction = (name)=>{
+				if (name) {
+					playerActions[name] = false;
+				}
+			};
+			let getAction = (name)=>{
+				return playerActions[name] || false;
+			};
+			let hasAction = ()=>{
+				let flag = playerActions.isPressed;
+				playerActions.isPressed = false;
+				return flag;
+			};
+			let resetActions = ()=>{
+				for (let key in playerActions) {
+					if (key !== 'isPressed') {
+						playerActions[key] = false;
+					}
+				}
+			};
+			let processControls = ()=>{
+				if (isPaused) {
+					return;
+				}
+				if (playerActions.left){
+					playerMove.x = -playerSpeed;
+				} else if (playerActions.right){
+					playerMove.x = playerSpeed;
+				} else {
+					playerMove.x = 0;
+				}
+			};
+			let keysMove = {
+				KeyA: 'left',
+				ArrowLeft: 'left',
+				KeyD: 'right',
+				ArrowRight: 'right',
+			}
+			let onKeyDown = (code)=>{
+				setAction();
+				if (keysMove[code]) {
+					setAction(keysMove[code]);
+					processControls();
+				}
+			};
+			let onKeyUp = (code)=>{
+				setAction();
+				if (keysMove[code]) {
+					resetAction(keysMove[code]);
+					processControls();
+				}
+			};
+			let onClick = (e)=>{
+				setAction('isActed');
+			};
+			let touchButtonsCreate = ()=>{
+				let bottomY = screenHeight - touchButtonPos * 2;
+				touchButtons = [
+					{
+						key: 'left',
+						x: 0,
+						y: bottomY,
+					},
+					{
+						key: 'right',
+						x: screenWidth - touchButtonSize,
+						y: bottomY,
+					},
+				];
+			};
+			let checkTouch = (t)=>{
+				let tx = t.clientX - screenOffsetX;
+				let ty = t.clientY - screenOffsetY;
+				touchPoints.push({
+					x: tx,
+					y: ty,
+				});
+				for (let i = 0; i < touchButtons.length; i++) {
+					let tb = touchButtons[i];
+					if (tx >= tb.x && tx <= tb.x + touchButtonSize && ty >= tb.y && ty <= tb.y + touchButtonSize) {
+						setAction('isTouch');
+						setAction(tb.key);
+					}
+				}
+			};
+			let touchPoints = [];
+			let handleTouch = (e, checkFullScreen)=>{
+				if (!document.fullscreenElement && checkFullScreen) {
+					touchButtonsCreate();
+					if (cnv.requestFullscreen) {
+						cnv.requestFullscreen().then(handleFullscreen).catch((e)=>{});
+					}
+				}
+				if (e.touches.length === 0) {
+					resetPlayer();
+					resetActions();
+					touchPoints = [];
+					return;
+				}
+				if (!isMobile) {
+					handleNormalscreen();
+				}
+				isMobile = true;
+				setAction();
+				touchPoints = [];
+				resetPlayer();
+				resetActions();
+				for (let i = 0; i < e.touches.length; i++) {
+					checkTouch(e.touches[i]);
+				}
+				if (getAction('isTouch')){
+					processControls();
+				}
+			};
+			let onResize = ()=>{
+				maxPlayerX = screenWidth - tileSize;
+				maxPlayerY = screenHeight - tileSize;
+				cnv.width = screenWidth;
+				cnv.height = screenHeight;
+				fontSize = screenWidth/20;
+				tileSize = screenWidth/30;
+				playerSpeed = tileSize/10;
+				bulletSpeed = tileSize/5;
+
+				bulletScale = tileSize/16;
+				bulletSizeX = bulletScale*16;
+				bulletSizeY = bulletScale*6;
+				bulletSpeed = tileSize/4;
+
+				enemySpeed = tileSize/30;
+				enemyScale = tileSize/16*2;
+				enemySizeX = enemyScale*16;
+				enemySizeY = enemyScale*6;
+				touchButtonSize = Math.max(100, tileSize*4);
+				touchButtonPos = touchButtonSize / 2;
+				ctx.font = `${fontSize}pt monospace`;
+
+				if (screenWidth < screenHeight){
+					enemySpeed = tileSize/15;
+				}
+
+				init();
+				nextLevel();
+			}
+			let handleNormalscreen = ()=>{
+				let rect = cnv.getBoundingClientRect();
+				screenOffsetX = rect.left;
+				screenOffsetY = rect.top;
+			};
+			let handleFullscreen = ()=>{
+				screenWidth = window.innerWidth;
+				screenHeight = window.innerHeight;
+				screenOffsetX = 0;
+				screenOffsetY = 0;
+				onResize();
+				if (isMobile) {
+					touchButtonsCreate();
+				}
+			};
+			let draw = ()=>{
+				Screens[currentScreen]();
+				ctx.strokeStyle = 'white';
+				for (let i = 0; i < touchButtons.length; i++) {
+					let tb = touchButtons[i];
+					ctx.strokeRect(tb.x, tb.y, touchButtonSize, touchButtonSize);
+				}
+			};
+
+			let tFPS = 60;
+			let tInterval = 1000/tFPS;
+			let tNext = 0;
+			let loop = (timestamp)=>{
+				let delta = timestamp - tNext;
+				if (delta > tInterval) {
+					tNext = timestamp - (delta % tInterval);
+					draw();
+				}
+				window.requestAnimationFrame(loop);
+			};
+			let init = ()=>{
+				bestScore = score;
+				score = 0;
+			};
+			let nextLevel = ()=>{
+				isPaused = false;
+				enemies = new Array(enemiesTotal).fill(null);
+				resetActions();
+				resetPlayer();
+				playerX = screenWidth / 2 + tileSize / 2;
+				playerY = screenHeight - tileSize * 2;
+			};
+			onResize();
+
+			cnv.addEventListener('touchstart',e=>handleTouch(e, false), {passive: true});
+			cnv.addEventListener('touchend',e=>handleTouch(e, true));
+			cnv.addEventListener('touchcancel',e=>handleTouch(e, true));
+			cnv.addEventListener('touchmove',e=>handleTouch(e, false), {passive: true});
+			window.addEventListener('keydown',e=>onKeyDown(e.code));
+			window.addEventListener('keyup',e=>onKeyUp(e.code));
+			window.addEventListener('click',e=>onClick(e));
+			window.addEventListener('contextmenu',e=>e.preventDefault());
+			window.addEventListener('resize',onResize);
+			window.addEventListener('orientationchange',handleFullscreen);
+			window.addEventListener('gamepadconnected',e=>onGamepadConnected(e));
+			window.requestAnimationFrame(loop);
+		})();
+	</script>
+</body>
+</html>
