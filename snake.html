@@ -27,7 +27,7 @@
 			// GUI part
 			let isMobile = (navigator.maxTouchPoints || 'ontouchstart' in document.documentElement);
 			let screenWidth = 464
-			let screenHeight = 592
+			let screenHeight = 656
 			let cnv = document.querySelector('canvas')
 			let ctx = cnv.getContext('2d')
 
@@ -56,12 +56,16 @@
 				screenWidth = window.innerWidth
 				screenHeight = window.innerHeight
 
+				if (screenWidth > 959) {
+					screenWidth = 464
+					screenHeight = 656
+				}
+
 				let minimalSize = Math.min(screenWidth, screenHeight)
 				if (screenWidth < 768) {
 					touchButtonSize = Math.floor(minimalSize/4)
 				} else if (screenWidth > 959) {
-					screenWidth = 464
-					screenHeight = 624
+					touchButtonSize = Math.floor(minimalSize/10)
 				} else {
 					touchButtonSize = Math.floor(minimalSize/8)
 				}
