@@ -1,0 +1,660 @@
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=0">
+	<style>
+		* {
+			touch-action: none;
+			margin: 0;
+			padding: 0;
+		}
+		body {
+			background: #333333;
+		}
+		canvas {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			margin-right: -50%;
+			transform: translate(-50%, -50%);
+		}
+	</style>
+</head>
+<body>
+	<canvas></canvas>
+	<script>
+		(()=>{
+
+			// GUI part
+			let isMobile = (navigator.maxTouchPoints || 'ontouchstart' in document.documentElement);
+			let screenWidth = 464
+			let screenHeight = 592
+			let cnv = document.querySelector('canvas')
+			let ctx = cnv.getContext('2d')
+
+			let fontSize = 14
+			let tileSize = 16
+			let tileSize2 = 8
+			let squareSize = tileSize-1
+			const fieldSize = 20
+			const fieldSizeMax = fieldSize-1
+			let field = {
+				x: 0,
+				y: 0,
+				w: 0,
+				h: 0,
+			}
+			let screenFade = 0
+			let screenOffsetX = 0
+			let screenOffsetY = 0
+			let touchButtons = []
+			let touchButtonSize = 100
+			let touchButtonPos = 0
+			let touchButtonsOnLeft = !!localStorage.buttonsOnLeft || false
+			let touchPoints = []
+
+			let onResize = ()=>{
+				screenWidth = window.innerWidth
+				screenHeight = window.innerHeight
+
+				let minimalSize = Math.min(screenWidth, screenHeight)
+				if (screenWidth < 768) {
+					touchButtonSize = Math.floor(minimalSize/4)
+				} else if (screenWidth > 959) {
+					screenWidth = 464
+					screenHeight = 624
+				} else {
+					touchButtonSize = Math.floor(minimalSize/8)
+				}
+				touchButtonPos = touchButtonSize / 2
+
+				cnv.width = screenWidth
+				cnv.height = screenHeight
+
+				
+				tileSize = minimalSize/fieldSize
+				tileSize2 = tileSize / 2
+				squareSize = tileSize - 1
+
+				field.w = fieldSize * tileSize
+				field.h = fieldSize * tileSize
+				field.x = screenWidth/2 - (field.w/2)
+				field.y = fontSize*3
+
+				fontSize = tileSize
+				ctx.font = `bold ${fontSize}px monospace`
+				ctx.textBaseline = 'middle'
+				ctx.textAlign = 'center'
+			}
+
+			let isPaused = true
+			let score = 0
+			let bestScore = +localStorage.bestScore || 0
+			let currentScreen = 'intro'
+
+			let isClicked = false
+			let isKeyPressed = false
+			let isTouched = false
+
+			let isPlayerActs = false
+			let playerActions = {
+				up:        false,
+				down:      false,
+				left:      false,
+				right:     false,
+				button1:   false,
+				button2:   false,
+			}
+			let keysMove = {
+				KeyW: 'up',
+				ArrowUp: 'up',
+				KeyS: 'down',
+				ArrowDown: 'down',
+				KeyA: 'left',
+				ArrowLeft: 'left',
+				KeyD: 'right',
+				ArrowRight: 'right',
+			}
+
+			let tFPS = 60;
+			let tInterval = 1000/tFPS;
+			let tNext = 0;
+			let tSpeedCurrent = 0
+			let tSpeedMax = 5 //max 2
+
+
+
+			let rnd = (min, max)=>{
+				return Math.floor(Math.random() * (max - min + 1)) + min;
+			}
+			let addScore = ()=>{
+				score++
+				if (bestScore < score) {
+					bestScore = score
+					localStorage.bestScore = bestScore
+				}
+			}
+
+			// game logic
+			let snake = {}
+			let letters = {}
+			let lettersCoords = {}
+			let words = [
+				'ICE','LIFE','HUNT','BIKE','CITY','DARK','DOOM','RUSH','TEAM','TOAD',//10
+				'COBRA','CURSE','DREAM','BLADE','FINAL','FORCE','METAL','PUNCH','QUEST','NINJA','POWER','STEEL','SWORD','RIVER','WORLD',//25
+				'DRAGON','ARCADE','ATTACK','BATTLE','BIONIC','GOBLIN','HOCKEY','HUNTER','ISLAND','LEGEND','MASTER','MUTANT','RANGER','RANSOM','RESCUE','ZOMBIE',//41
+				'BLASTER','CLIMBER','DRACULA','FANTASY','REVENGE','WARRIOR','COMMANDO',//48
+				'DARKWING','GUARDIAN','ULTIMATE',//51
+				'ADVENTURE','LEGENDARY','WRESTLING',//54
+			]
+			// add more words (and letters on field too!)
+			// sort array high to low
+			let moreWords = [
+				500,
+				200,
+				100,
+				50,
+				20,
+			]
+			// add more words (and letters on field too!)
+			// sort keys high to low
+			let randomWords = {
+				200 : words.length-1,
+				100 : 45,
+				75  : 35,
+				50  : 25,
+				25  : 20,
+				0   : 10,
+			}
+			let wordsCount = 1
+			let currentLetter = ''
+			let currentWords = []
+			let lastWord = ''
+			let currentLetterPos = 0
+			let resetGame = ()=>{
+				let centerY = 12
+				snake = {
+					x: 10,
+					y: 12,
+					dx: 0,
+					dy: 0,
+					cells: [
+						{x: 10, y: 12},
+						{x: 9, y: 12},
+						{x: 8, y: 12},
+						{x: 7, y: 12},
+					],
+					maxCells: 4,
+				}
+				score = 0
+				currentLetterPos = 0
+				isPaused = false
+				letters = {}
+				currentWords = []
+				pushNextWords()
+				ctx.font = `bold ${fontSize}px monospace`
+			}
+			let placeLetter = (char)=>{
+				let x
+				let y
+
+				do {
+					x = rnd(0, fieldSizeMax)
+					y = rnd(0, fieldSizeMax)
+				} while (letters[`${x}_${y}`])
+
+				letters[`${x}_${y}`] = {
+					char: char,
+					m: ctx.measureText(char),
+					x: x,
+					y: y,
+				}
+			}
+			let pushNextWords = ()=>{
+				let max = 0
+				for (let i = 0; i < moreWords.length; i++) {
+					let testScore = moreWords[i]
+					if (score > testScore) {
+						max = moreWords.length - i
+						console.log('max', max, i, moreWords.length);
+						break
+					}
+				}
+				max -= currentWords.length
+				for (let j = 0; j <= max; j++) {
+					pushNextWord()
+				}
+			}
+			let pushNextWord = ()=>{
+				let max = 1
+				for (let testScore in randomWords) {
+					if (score > testScore) {
+						max = randomWords[testScore]
+						break
+					}
+				}
+
+				let word = ''
+				do {
+					let wordIndex = rnd(0, max)
+					word = words[wordIndex]
+				} while(lastWord === word)
+				lastWord = word
+
+				for (let j = 0; j < word.length; j++) {
+					placeLetter(word[j])
+				}
+				currentWords.push(word)
+			}
+			let letterEaten = ()=>{
+				addScore()
+				currentLetterPos++
+				if (currentLetterPos >= currentWords[0].length) {
+					currentWords.shift()
+					currentLetterPos = 0
+					pushNextWords()
+				}
+			}
+			let moveSnake = ()=>{
+				if (snake.dx === 0 && snake.dy === 0) {
+					return
+				}				
+				snake.x += snake.dx;
+				snake.y += snake.dy;
+
+				let isGameOver = false
+				if (snake.x < 0) {
+					isGameOver = true
+				} else if (snake.x > fieldSizeMax) {
+					isGameOver = true
+				}
+				if (snake.y < 0) {
+					isGameOver = true
+				} else if (snake.y > fieldSizeMax) {
+					isGameOver = true
+				}
+
+				for (let i = 0; i < snake.cells.length; i++) {
+					let cell = snake.cells[i]
+					for (let j = i + 1; j < snake.cells.length; j++) {
+						if (cell.x === snake.cells[j].x && cell.y === snake.cells[j].y) {
+							isGameOver = true
+							break
+						}
+					}
+				}
+				if (isGameOver) {
+					showGameOver()
+					return
+				}
+
+				snake.cells.unshift({
+					x: snake.x,
+					y: snake.y
+				})
+
+				let eaten = ''
+				for (let coords in letters) {
+					if (coords === `${snake.x}_${snake.y}`) {
+						eaten = coords
+						break
+					}
+				}
+				if (eaten !== '') {
+					let eatenLetter = letters[eaten]
+					delete letters[eaten]
+					if (currentWords[0][currentLetterPos] === eatenLetter.char) {
+						letterEaten()
+					} else {
+						placeLetter(eatenLetter.char)
+					}
+					snake.maxCells++
+				}
+				if (snake.cells.length > snake.maxCells) {
+					snake.cells.pop()
+				}
+			}
+			let drawSnake = ()=>{
+				// head
+				ctx.fillStyle = 'lightblue'
+				ctx.fillRect(field.x+snake.x*tileSize, field.y+snake.y*tileSize, squareSize, squareSize)
+				// body
+				ctx.fillStyle = 'green'
+				for (let i = 1; i < snake.cells.length; i++) {
+					ctx.fillRect(field.x+snake.cells[i].x*tileSize, field.y+snake.cells[i].y*tileSize, squareSize, squareSize)
+				}
+			}
+			let drawLetters = ()=>{
+				ctx.textAlign = 'left'
+
+				for (let coords in letters) {
+					let letter = letters[coords]
+					ctx.fillStyle = '#8b0202'
+					ctx.fillRect(letter.x*tileSize+field.x, letter.y*tileSize+field.y, tileSize, tileSize)
+					ctx.fillStyle = 'white'
+					ctx.fillText(letter.char,
+						field.x + letter.x * tileSize + tileSize2 - letter.m.width / 2,
+						field.y + letter.y * tileSize + fontSize/2+1)
+				}
+				let x
+				let y = field.y + field.w + tileSize
+				for (let wi = 0; wi < currentWords.length; wi++) {
+					let currentWord = currentWords[wi]
+					x = screenWidth/2 - currentWord.length*tileSize/2
+					for (let ci = 0; ci < currentWord.length; ci++) {
+						let letter = currentWord[ci]
+						let m = ctx.measureText(letter)
+						ctx.fillStyle = '#8b0202'//red
+						if (wi === 0 && currentLetterPos > ci) {
+							ctx.fillStyle = '#7ab000'//green
+						}
+						ctx.fillRect(x, y, tileSize, tileSize)
+						ctx.fillStyle = 'white'
+						ctx.fillText(letter,
+							x + tileSize2 - m.width / 2,
+							y + fontSize/2+1)
+						x += tileSize
+					}
+					y += tileSize
+				}
+			}
+			let Logics = {
+				intro:()=>{
+				},
+				play:()=>{
+					if (isPaused) {
+						return
+					}
+					moveSnake()
+				},
+				lose:()=>{
+				},
+			}
+			let showGameOver = ()=>{
+				isPaused = true
+				screenFade = 0
+				ctx.font = `${fontSize}px monospace`
+				switchScreen('lose')
+			}
+			let switchScreen = (name)=>{
+				resetActions()
+				currentScreen = name
+			}
+			let Screens = {
+				intro:()=>{
+					let x = screenWidth/2
+					let y = screenHeight/2
+					ctx.fillStyle = 'darkblue'
+					ctx.fillRect(0, 0, screenWidth, screenHeight)
+					ctx.textAlign = 'center'
+					ctx.fillStyle = 'white'
+					ctx.fillText('🐍N🅰KE', x, y)
+					ctx.fillStyle = 'white'
+					ctx.fillText('Touch screen to start', x, y+=fontSize*2)
+					if (isMobile) {
+						ctx.fillText('Touch SCORE bar to move keys', x, y+=fontSize*2)
+					}
+				},
+				play:()=>{
+					ctx.fillStyle = 'darkblue'
+					ctx.fillRect(0, 0, screenWidth, screenHeight)
+
+					ctx.fillStyle = '#888888'
+					ctx.fillRect(field.x, field.y, field.w, field.h)
+
+					drawSnake()
+					drawLetters()
+
+					ctx.fillStyle = 'lightgreen'
+					ctx.textAlign = 'left'
+					ctx.fillText(`SCORE: ${score}`, tileSize, fontSize)
+
+					ctx.fillStyle = 'yellow'
+					ctx.textAlign = 'right'
+					ctx.fillText(`BEST: ${bestScore}`, screenWidth-tileSize, fontSize)
+				},
+				lose:()=>{
+					if (screenFade < 0.5) {
+						screenFade += 0.005
+					}
+					let x = field.x + field.w / 2
+					let y = field.y + field.h / 2
+					ctx.fillStyle = `rgba(0,0,0,${screenFade})`
+					ctx.fillRect(0, 0, screenWidth, screenHeight)
+					ctx.fillStyle = 'red'
+					ctx.textAlign = 'center'
+					ctx.fillText('YOU DIED', x, y)
+					if (score < bestScore) {
+						ctx.fillStyle = 'green'
+					} else {
+						ctx.fillStyle = 'yellow'
+					}
+					ctx.fillText(`SCORE: ${score}`, x, y+tileSize*2)
+					ctx.fillStyle = 'white'
+					ctx.fillText(`BEST: ${bestScore}`, x, y+tileSize*3)
+
+					if (screenFade >= 0.5) {
+						ctx.fillText('REPEAT?', x, y+tileSize*5)
+					}
+				},
+			}
+			let Actions = {
+				intro:()=>{
+					if (isTouched) {
+						if (!document.fullscreenElement && checkFullScreen) {
+							if (cnv.requestFullscreen) {
+								console.log('requestFullscreen')
+								// cnv.requestFullscreen().then(handleFullscreen).catch((e)=>{});
+							}
+						}
+						touchButtonsCreate()
+					}
+					switchScreen('play')
+				},
+				play:()=>{
+					if (isPaused) {
+						isPaused = false
+					}
+					if (playerActions.left && snake.dx !== 1) {
+						snake.dx = -1
+						snake.dy = 0
+					} else if (playerActions.right && snake.dx !== -1) {
+						snake.dx = 1
+						snake.dy = 0
+					} else if (playerActions.up && snake.dy !== 1) {
+						snake.dx = 0
+						snake.dy = -1
+					} else if (playerActions.down && snake.dy !== -1) {
+						snake.dx = 0
+						snake.dy = 1
+					}
+				},
+				lose:()=>{
+					if (screenFade < 0.5) {
+						return
+					}
+					resetGame()
+					switchScreen('play')
+				},
+			}
+
+			// player controls
+			let setAction = (name)=>{
+				isPlayerActs = true
+				if (name) {
+					playerActions[name] = true
+				}
+			}
+			let resetAction = (name)=>{
+				if (name) {
+					playerActions[name] = false
+				}
+			}
+			let resetActions = ()=>{
+				for (let key in playerActions) {
+					playerActions[key] = false
+				}
+			}
+			let processControls = ()=>{
+				Actions[currentScreen]()
+				isClicked = false
+			}
+
+			// keyboards controls
+			let onKeyDown = (code)=>{
+				isKeyPressed = true
+				if (keysMove[code]) {
+					setAction(keysMove[code])
+				}
+				processControls()
+			}
+			let onKeyUp = (code)=>{
+				isKeyPressed = false
+				if (keysMove[code]) {
+					resetAction(keysMove[code])
+				}
+				processControls()
+			}
+
+			// touch controls
+			let onClick = (e)=>{
+				isClicked = true
+				processControls()
+			}
+			let touchButtonsCreate = ()=>{
+				let bottomY = screenHeight - touchButtonPos * 2
+				let startPos = screenWidth - touchButtonSize * 3
+				if (touchButtonsOnLeft) {
+					startPos = 0
+				}
+
+				touchButtons = [
+					{
+						key: 'left',
+						name: '⬅',
+						x: startPos,
+						y: bottomY,
+					},
+					{
+						key: 'down',
+						name: '⬇',
+						x: startPos + touchButtonSize,
+						y: bottomY,
+					},
+					{
+						key: 'right',
+						name: '➡',
+						x: startPos + touchButtonSize * 2,
+						y: bottomY,
+					},
+					{
+						key: 'up',
+						name: '⬆',
+						x: startPos + touchButtonSize,
+						y: bottomY-touchButtonSize,
+					},
+				]
+			}
+
+			let checkTouch = (t)=>{
+				let tx = t.clientX - screenOffsetX
+				let ty = t.clientY - screenOffsetY
+				touchPoints.push({
+					x: tx,
+					y: ty,
+				})
+
+				if (ty < field.y) {
+					touchButtonsOnLeft = !touchButtonsOnLeft
+					localStorage.buttonsOnLeft = touchButtonsOnLeft
+					touchButtonsCreate()
+					return
+				}
+
+				for (let i = 0; i < touchButtons.length; i++) {
+					let tb = touchButtons[i];
+					if (tx >= tb.x && tx <= tb.x + touchButtonSize && ty >= tb.y && ty <= tb.y + touchButtonSize) {
+						setAction(tb.key)
+					}
+				}
+			}
+			
+			let checkFullScreen = false
+			let handleTouch = (e, _checkFullScreen)=>{
+				checkFullScreen = _checkFullScreen
+				if (e.touches.length === 0) {
+					resetActions()
+					touchPoints = []
+					return
+				}
+				isMobile = true
+				isTouched = true
+				touchPoints = []
+				resetActions()
+				for (let i = 0; i < e.touches.length; i++) {
+					checkTouch(e.touches[i])
+				}
+				processControls()
+				checkFullScreen = false
+			}
+			let handleFullscreen = ()=>{
+				onResize()
+				if (isMobile) {
+					touchButtonsCreate()
+				}
+			};
+
+
+			// frame functions
+			let nextFrame = (timestamp)=>{
+				let delta = timestamp - tNext;
+				if (delta > tInterval) {
+					tNext = timestamp - (delta % tInterval)
+					if (++tSpeedCurrent >= tSpeedMax) {
+						tSpeedCurrent = 0
+						loop()
+					}
+					draw()
+				}
+				window.requestAnimationFrame(nextFrame)
+			}
+			let draw = ()=>{
+				Screens[currentScreen]()
+				ctx.strokeStyle = 'gray'
+				ctx.fillStyle = 'gray'
+				for (let i = 0; i < touchButtons.length; i++) {
+					let tb = touchButtons[i]
+					ctx.strokeRect(tb.x, tb.y, touchButtonSize, touchButtonSize)
+					ctx.fillText(tb.name, tb.x+touchButtonSize/2, tb.y+touchButtonSize/2)
+				}
+				ctx.fillStyle = 'green'
+				for (let i = 0; i < touchPoints.length; i++) {
+					ctx.beginPath()
+					ctx.arc(touchPoints[i].x, touchPoints[i].y, tileSize, 0, 2*Math.PI)
+					ctx.fill()
+				}
+			}
+			let loop = ()=>{
+				Logics[currentScreen]()
+			}
+
+			// bind events
+			cnv.addEventListener('touchstart',e=>handleTouch(e, false), {passive: true});
+			cnv.addEventListener('touchend',e=>handleTouch(e, true));
+			cnv.addEventListener('touchcancel',e=>handleTouch(e, true));
+			cnv.addEventListener('touchmove',e=>handleTouch(e, false), {passive: true});
+			window.addEventListener('keydown',e=>onKeyDown(e.code));
+			window.addEventListener('keyup',e=>onKeyUp(e.code));
+			window.addEventListener('click',e=>onClick(e));
+			window.addEventListener('contextmenu',e=>e.preventDefault());
+			window.addEventListener('resize',onResize);
+			window.addEventListener('orientationchange',handleFullscreen);
+			window.addEventListener('gamepadconnected',e=>onGamepadConnected(e));
+
+			// start on load
+			onResize()
+			resetGame()
+			window.requestAnimationFrame(nextFrame)
+		})();
+	</script>
+</body>
+</html>
