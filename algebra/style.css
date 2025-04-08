@@ -1,0 +1,65 @@
+* {
+	padding: 0;
+	margin: 0;
+}
+.hidden {
+	visibility: hidden;
+}
+body {
+	text-align: center;
+	font-family: Tahoma Verdana Arial sans-serif;
+	font-size: 1.2rem;
+}
+.game {
+	width: max-content;
+	margin: 0 auto;
+}
+#table {
+	margin-top: 50px;
+}
+table {
+	border-collapse: collapse;
+}
+table td {
+	border: 1px solid gray;
+	width: 40px;
+	height: 40px;
+	text-align: center;
+}
+
+table td.blinking {
+	animation: blink 2s infinite alternate;
+}
+table td.good {
+	background-color: lightgreen;
+}
+table td.bad {
+	background-color: lightpink;
+}
+
+@keyframes blink {
+	0% { background-color: white; }
+	100% { background-color: lightblue; }
+}
+
+#keyboard {
+	text-align: center;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: max-content;
+    margin: 0 auto;
+    margin-top: 10px;
+}
+#keyboard button {
+    width: 60px;
+    height: 60px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    background-color: #dcdcdc;
+    cursor: pointer;
+}
+#keyboard button:hover {
+    background-color: #e0e0e0;
+}
