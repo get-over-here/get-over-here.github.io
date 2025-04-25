@@ -140,7 +140,7 @@ export default class Battle {
 		this.tween = new Tween({pos: 0})
 			.to({pos: 1}, 1000)
 			.repeat(Infinity)
-			.delay(200)
+			.delay(2000)
 			.onEveryStart(()=>{
 				this.nextMove();
 			})
