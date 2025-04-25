@@ -137,15 +137,17 @@ export default class Battle {
 		}
 	}
 	startCombat(){
-		this.tween = new Tween({pos: 0})
-			.to({pos: 1}, 1000)
-			.repeat(Infinity)
-			.delay(2000)
-			.onEveryStart(()=>{
-				this.nextMove();
-			})
-			.start();
-		this.group.add(this.tween);
+		setTimeout(()=>{
+			this.tween = new Tween({pos: 0})
+				.to({pos: 1}, 1000)
+				.repeat(Infinity)
+				.onEveryStart(()=>{
+					this.nextMove();
+				})
+				.start();
+			this.group.remove(this.tween);
+			this.group.add(this.tween);
+		}, 2000);
 	}
 	endCombat(){
 	}
